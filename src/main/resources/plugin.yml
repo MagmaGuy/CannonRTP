@@ -1,16 +1,20 @@
-name: WorldCannon
-version: 0.0.1
+name: CannonRTP
+version: ${project.version}
 author: MagmaGuy
-main: com.magmaguy.worldcannon.WorldCannon
-api-version: 1.13
-softdepend: [WorldGuard]
+main: com.magmaguy.cannonrtp.CannonRTP
+api-version: '1.21'
+softdepend: [WorldGuard, Towny, Lands, GriefPrevention, HuskTowns, HuskClaims, FreeMinecraftModels]
 
 commands:
-  worldcannon:
-    description: Catch-all command
-    usage: /worldcannon
-    aliases: [wc]
+  cannonrtp:
+    description: Manages CannonRTP cannons and debugging.
+    usage: /cannonrtp
+    aliases: [crtp, wc]
+
 permissions:
-  worldcannon.set:
-    description: Allows players to run /wc set
+  cannonrtp.admin:
+    description: Allows admins to manage CannonRTP.
     default: op
+  cannonrtp.use:
+    description: Allows players to use CannonRTPs.
+    default: true

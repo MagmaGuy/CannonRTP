@@ -1,0 +1,54 @@
+package com.magmaguy.cannonrtp.protection.adapters;
+
+import com.magmaguy.cannonrtp.config.DefaultConfig;
+import com.magmaguy.cannonrtp.protection.ProtectionAdapter;
+import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
+import me.ryanhamshire.GriefPrevention.Claim;
+import me.ryanhamshire.GriefPrevention.GriefPrevention;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+
+public class GriefPreventionProtectionAdapter implements ProtectionAdapter {
+    private static final String PLUGIN_NAME = "GriefPrevention";
+
+    @Override
+    public String getPluginName() {
+        return PLUGIN_NAME;
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return DefaultConfig.isGriefPreventionEnabled() &&
+                Bukkit.getPluginManager().isPluginEnabled(PLUGIN_NAME);
+    }
+
+    @Override
+    public ProtectionQueryResult query(Location location) {
+        GriefPrevention griefPrevention = GriefPrevention.instance;
+        if (griefPrevention == null || griefPrevention.dataStore == null) {
+            return ProtectionQueryResult.pass();
+        }
+
+        Claim claim = griefPrevention.dataStore.getClaimAt(location, false, null);
+        if (claim == null) {
+            return DefaultConfig.isGriefPreventionAllowWilderness()
+                    ? ProtectionQueryResult.pass()
+                    : blocked("GriefPrevention wilderness");
+        }
+
+        if (claim.isAdminClaim()) {
+            return DefaultConfig.isGriefPreventionAllowAdminClaims()
+                    ? ProtectionQueryResult.pass()
+                    : blocked("a GriefPrevention admin claim");
+        }
+
+        return DefaultConfig.isGriefPreventionAllowPlayerClaims()
+                ? ProtectionQueryResult.pass()
+                : blocked("a GriefPrevention player claim");
+    }
+
+    private ProtectionQueryResult blocked(String reason) {
+        return ProtectionQueryResult.blocked(PLUGIN_NAME, reason);
+    }
+}
+
