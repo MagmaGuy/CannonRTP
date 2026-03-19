@@ -17,12 +17,20 @@ public class ProtectionQueryService {
     private final List<ProtectionAdapter> adapters = new ArrayList<>();
 
     public ProtectionQueryService() {
-        adapters.add(new WorldGuardProtectionAdapter());
-        adapters.add(new TownyProtectionAdapter());
-        adapters.add(new LandsProtectionAdapter());
-        adapters.add(new GriefPreventionProtectionAdapter());
-        adapters.add(new HuskTownsProtectionAdapter());
-        adapters.add(new HuskClaimsProtectionAdapter());
+        safeRegister(() -> new WorldGuardProtectionAdapter());
+        safeRegister(() -> new TownyProtectionAdapter());
+        safeRegister(() -> new LandsProtectionAdapter());
+        safeRegister(() -> new GriefPreventionProtectionAdapter());
+        safeRegister(() -> new HuskTownsProtectionAdapter());
+        safeRegister(() -> new HuskClaimsProtectionAdapter());
+    }
+
+    private void safeRegister(java.util.function.Supplier<ProtectionAdapter> factory) {
+        try {
+            adapters.add(factory.get());
+        } catch (NoClassDefFoundError ignored) {
+            // Optional dependency not present at runtime — skip silently
+        }
     }
 
     public boolean isPotentialLandingLocationAllowed(Location location) {
