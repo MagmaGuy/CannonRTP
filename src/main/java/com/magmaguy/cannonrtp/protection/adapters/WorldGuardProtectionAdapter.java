@@ -9,7 +9,6 @@ import com.sk89q.worldguard.protection.ApplicableRegionSet;
 import com.sk89q.worldguard.protection.flags.Flags;
 import com.sk89q.worldguard.protection.flags.StateFlag;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 
 public class WorldGuardProtectionAdapter implements ProtectionAdapter {
@@ -18,12 +17,6 @@ public class WorldGuardProtectionAdapter implements ProtectionAdapter {
     @Override
     public String getPluginName() {
         return PLUGIN_NAME;
-    }
-
-    @Override
-    public boolean isAvailable() {
-        return DefaultConfig.isWorldGuardEnabled() &&
-                Bukkit.getPluginManager().isPluginEnabled(PLUGIN_NAME);
     }
 
     @Override

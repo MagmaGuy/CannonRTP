@@ -5,7 +5,6 @@ import com.magmaguy.cannonrtp.protection.ProtectionAdapter;
 import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
 import net.william278.huskclaims.api.BukkitHuskClaimsAPI;
 import net.william278.huskclaims.claim.Claim;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 
 import java.util.Optional;
@@ -16,12 +15,6 @@ public class HuskClaimsProtectionAdapter implements ProtectionAdapter {
     @Override
     public String getPluginName() {
         return PLUGIN_NAME;
-    }
-
-    @Override
-    public boolean isAvailable() {
-        return DefaultConfig.isHuskClaimsEnabled() &&
-                Bukkit.getPluginManager().isPluginEnabled(PLUGIN_NAME);
     }
 
     @Override

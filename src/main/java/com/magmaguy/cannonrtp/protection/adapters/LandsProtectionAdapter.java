@@ -6,7 +6,6 @@ import com.magmaguy.cannonrtp.protection.ProtectionAdapter;
 import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
 import me.angeschossen.lands.api.LandsIntegration;
 import me.angeschossen.lands.api.land.Area;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 
 public class LandsProtectionAdapter implements ProtectionAdapter {
@@ -15,12 +14,6 @@ public class LandsProtectionAdapter implements ProtectionAdapter {
     @Override
     public String getPluginName() {
         return PLUGIN_NAME;
-    }
-
-    @Override
-    public boolean isAvailable() {
-        return DefaultConfig.isLandsEnabled() &&
-                Bukkit.getPluginManager().isPluginEnabled(PLUGIN_NAME);
     }
 
     @Override

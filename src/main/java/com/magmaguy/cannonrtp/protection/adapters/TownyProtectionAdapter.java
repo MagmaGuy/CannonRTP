@@ -4,7 +4,6 @@ import com.magmaguy.cannonrtp.config.DefaultConfig;
 import com.magmaguy.cannonrtp.protection.ProtectionAdapter;
 import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
 import com.palmergames.bukkit.towny.TownyAPI;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 
 public class TownyProtectionAdapter implements ProtectionAdapter {
@@ -13,12 +12,6 @@ public class TownyProtectionAdapter implements ProtectionAdapter {
     @Override
     public String getPluginName() {
         return PLUGIN_NAME;
-    }
-
-    @Override
-    public boolean isAvailable() {
-        return DefaultConfig.isTownyEnabled() &&
-                Bukkit.getPluginManager().isPluginEnabled(PLUGIN_NAME);
     }
 
     @Override

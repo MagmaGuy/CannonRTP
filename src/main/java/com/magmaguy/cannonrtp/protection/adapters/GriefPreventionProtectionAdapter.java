@@ -5,7 +5,6 @@ import com.magmaguy.cannonrtp.protection.ProtectionAdapter;
 import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
 import me.ryanhamshire.GriefPrevention.Claim;
 import me.ryanhamshire.GriefPrevention.GriefPrevention;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 
 public class GriefPreventionProtectionAdapter implements ProtectionAdapter {
@@ -14,12 +13,6 @@ public class GriefPreventionProtectionAdapter implements ProtectionAdapter {
     @Override
     public String getPluginName() {
         return PLUGIN_NAME;
-    }
-
-    @Override
-    public boolean isAvailable() {
-        return DefaultConfig.isGriefPreventionEnabled() &&
-                Bukkit.getPluginManager().isPluginEnabled(PLUGIN_NAME);
     }
 
     @Override

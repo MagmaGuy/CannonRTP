@@ -7,8 +7,8 @@ import com.magmaguy.cannonrtp.CannonRTP;
 import com.magmaguy.cannonrtp.config.DefaultConfig;
 import com.magmaguy.cannonrtp.config.CannonRTPConfig;
 import com.magmaguy.cannonrtp.config.CannonRTPConfigFields;
+import com.magmaguy.cannonrtp.protection.ProtectionManager;
 import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
-import com.magmaguy.cannonrtp.protection.ProtectionQueryService;
 import com.magmaguy.cannonrtp.util.MessageUtils;
 import lombok.Getter;
 import org.bukkit.Chunk;
@@ -48,7 +48,6 @@ public class CannonRTPManager implements Listener {
     private final Random random = new Random();
     private final Map<String, ConfiguredCannonRTP> configuredCannons = new LinkedHashMap<>();
     private final Map<UUID, Long> interactionCooldowns = new ConcurrentHashMap<>();
-    private ProtectionQueryService protectionQueryService;
     private BukkitTask scanTask;
     private BukkitTask preloadTask;
     private BukkitTask visualTask;
@@ -71,7 +70,7 @@ public class CannonRTPManager implements Listener {
         interactionCooldowns.clear();
 
         cannonRTPConfig = new CannonRTPConfig();
-        protectionQueryService = new ProtectionQueryService();
+        ProtectionManager.initialize();
 
         for (Map.Entry<String, CannonRTPConfigFields> entry : CannonRTPConfig.getCannonRTPs().entrySet()) {
             ConfiguredCannonRTP configuredCannonRTP = new ConfiguredCannonRTP(entry.getKey(), entry.getValue());
@@ -92,10 +91,11 @@ public class CannonRTPManager implements Listener {
         destroyConfiguredCannonVisuals();
         configuredCannons.clear();
         interactionCooldowns.clear();
+        ProtectionManager.shutdown();
     }
 
     public boolean isPotentialLandingLocationAllowed(Location location) {
-        return protectionQueryService != null && protectionQueryService.isPotentialLandingLocationAllowed(location);
+        return ProtectionManager.isPotentialLandingLocationAllowed(location);
     }
 
     public List<String> getKnownCannonIds() {
@@ -127,7 +127,7 @@ public class CannonRTPManager implements Listener {
     }
 
     public void probeLocation(CommandSender sender, Location location) {
-        ProtectionQueryResult result = protectionQueryService.inspect(location);
+        ProtectionQueryResult result = ProtectionManager.inspect(location);
         if (result.allowed()) {
             MessageUtils.sendRaw(sender, DefaultConfig.getProbeAllowedMessage());
             return;
@@ -359,7 +359,7 @@ public class CannonRTPManager implements Listener {
             return;
         }
 
-        ProtectionQueryResult protectionQueryResult = protectionQueryService.inspect(landingLocation);
+        ProtectionQueryResult protectionQueryResult = ProtectionManager.inspect(landingLocation);
         if (!protectionQueryResult.allowed()) {
             configuredCannonRTP.markSearchFailure(SearchFailureReason.PROTECTED_LAND);
             return;

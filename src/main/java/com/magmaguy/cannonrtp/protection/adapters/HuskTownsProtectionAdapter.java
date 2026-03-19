@@ -21,12 +21,6 @@ public class HuskTownsProtectionAdapter implements ProtectionAdapter {
     }
 
     @Override
-    public boolean isAvailable() {
-        return DefaultConfig.isHuskTownsEnabled() &&
-                Bukkit.getPluginManager().isPluginEnabled(PLUGIN_NAME);
-    }
-
-    @Override
     public ProtectionQueryResult query(Location location) {
         BukkitHuskTownsAPI api = BukkitHuskTownsAPI.getInstance();
         Optional<TownClaim> townClaim = api.getClaimAt(location);
