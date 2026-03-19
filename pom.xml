@@ -157,6 +157,10 @@
                             <pattern>org.reflections</pattern>
                             <shadedPattern>com.magmaguy.cannonrtp.reflections</shadedPattern>
                         </relocation>
+                        <relocation>
+                            <pattern>com.magmaguy.easyminecraftgoals</pattern>
+                            <shadedPattern>com.magmaguy.worldcannon.easyminecraftgoals</shadedPattern>
+                        </relocation>
                     </relocations>
                 </configuration>
                 <executions>
