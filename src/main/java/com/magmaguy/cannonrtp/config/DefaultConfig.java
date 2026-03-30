@@ -20,8 +20,6 @@ public class DefaultConfig extends ConfigurationFile {
     private static DefaultConfig instance;
     private static boolean setupDone;
     @Getter
-    private static int scanIntervalTicks;
-    @Getter
     private static int particleIntervalTicks;
     @Getter
     private static int searchAttemptsPerTick;
@@ -169,10 +167,6 @@ public class DefaultConfig extends ConfigurationFile {
         setupDone = ConfigurationEngine.setBoolean(
                 List.of("Tracks whether the first-time setup guidance has been completed."),
                 fileConfiguration, "setupDone", false);
-        scanIntervalTicks = Math.max(2, ConfigurationEngine.setInt(
-                List.of("How frequently CannonRTP checks whether players have stepped into a cannon.",
-                        "Cannon scanning currently runs every other tick."),
-                fileConfiguration, "runtime.scanIntervalTicks", 2));
         particleIntervalTicks = Math.max(5, ConfigurationEngine.setInt(
                 List.of("How frequently CannonRTP renders idle particles for enabled cannons."),
                 fileConfiguration, "runtime.particleIntervalTicks", 15));

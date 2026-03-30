@@ -190,6 +190,7 @@ public class ConfiguredCannonRTP {
     }
 
     public String getStatusDisplay() {
+        if (!isEnabled()) return "Disabled";
         return switch (getEffectiveSearchState()) {
             case READY -> "Ready";
             case SEARCHING -> queuedLocations.isEmpty() ? "Charging" : "Maintaining";
@@ -268,10 +269,6 @@ public class ConfiguredCannonRTP {
                 && !modelName.isBlank()
                 && Bukkit.getPluginManager().isPluginEnabled("FreeMinecraftModels")
                 && ModeledEntityManager.modelExists(modelName);
-    }
-
-    public boolean shouldUseCustomLaunchAnimation() {
-        return shouldUseCustomModel() && ModeledEntityManager.modelExists("fire");
     }
 
     private void initializeCustomModel() {
