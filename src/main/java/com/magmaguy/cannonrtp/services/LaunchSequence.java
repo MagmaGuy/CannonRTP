@@ -91,6 +91,7 @@ public class LaunchSequence {
     }
 
     private void enterSearching() {
+        cannon.playFireAnimation();
         // Apply levitation for the searching duration
         player.addPotionEffect(new PotionEffect(
                 PotionEffectType.LEVITATION,

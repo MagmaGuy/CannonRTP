@@ -289,6 +289,11 @@ public class ConfiguredCannonRTP {
         staticModel = StaticEntity.create(modelName, location.clone());
     }
 
+    public void playFireAnimation() {
+        if (staticModel == null) return;
+        staticModel.playAnimation("fire", false, false);
+    }
+
     public Color getPrimaryVisualColor() {
         return switch (getEffectiveSearchState()) {
             case READY -> Color.fromRGB(255, 179, 71);
