@@ -25,32 +25,26 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.event.world.WorldUnloadEvent;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
-import org.bukkit.util.Vector;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class CannonRTPManager implements Listener {
-    private static final int CUSTOM_MODEL_CHARGE_TICKS = 60;
+    private static final int SCAN_CADENCE_TICKS = 2;
     private final CannonRTP plugin;
     private final Random random = new Random();
     private final Map<String, ConfiguredCannonRTP> configuredCannons = new LinkedHashMap<>();
-    private final Map<UUID, Long> interactionCooldowns = new ConcurrentHashMap<>();
-    private BukkitTask scanTask;
-    private BukkitTask preloadTask;
-    private BukkitTask visualTask;
+    private final Map<UUID, LaunchSequence> activeLaunches = new LinkedHashMap<>();
+    private BukkitTask mainTask;
     @Getter
     private CannonRTPConfig cannonRTPConfig;
     private int visualAnimationTick = 0;
@@ -67,7 +61,6 @@ public class CannonRTPManager implements Listener {
         shutdownTasks();
         destroyConfiguredCannonVisuals();
         configuredCannons.clear();
-        interactionCooldowns.clear();
 
         cannonRTPConfig = new CannonRTPConfig();
         ProtectionManager.initialize();
@@ -90,7 +83,6 @@ public class CannonRTPManager implements Listener {
         shutdownTasks();
         destroyConfiguredCannonVisuals();
         configuredCannons.clear();
-        interactionCooldowns.clear();
         ProtectionManager.shutdown();
     }
 
@@ -221,110 +213,146 @@ public class CannonRTPManager implements Listener {
     }
 
     private void startTasks() {
-        scanTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::scanCannons, 20L, 2L);
-        preloadTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::preloadLandingLocations, 20L, 1L);
-        visualTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::renderIdleVisuals, 20L, 1L);
+        mainTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tickAll, 20L, 1L);
     }
 
     private void shutdownTasks() {
-        if (scanTask != null) {
-            scanTask.cancel();
-            scanTask = null;
+        if (mainTask != null) {
+            mainTask.cancel();
+            mainTask = null;
         }
-        if (preloadTask != null) {
-            preloadTask.cancel();
-            preloadTask = null;
+        for (LaunchSequence sequence : activeLaunches.values()) {
+            sequence.cleanup();
         }
-        if (visualTask != null) {
-            visualTask.cancel();
-            visualTask = null;
-        }
+        activeLaunches.clear();
     }
 
-    private void scanCannons() {
+    private void tickAll() {
+        visualAnimationTick = (visualAnimationTick + 1) % 7200;
+
+        // Advance all active launch sequences
+        Iterator<Map.Entry<UUID, LaunchSequence>> launchIterator = activeLaunches.entrySet().iterator();
+        while (launchIterator.hasNext()) {
+            Map.Entry<UUID, LaunchSequence> entry = launchIterator.next();
+            LaunchSequence sequence = entry.getValue();
+            if (!sequence.tick()) {
+                launchIterator.remove();
+            }
+        }
+
+        // Per-cannon work: visuals, preloading, player scanning
+        int particleCadence = Math.max(1, DefaultConfig.getParticleIntervalTicks() / 5);
+        boolean shouldScanPlayers = visualAnimationTick % SCAN_CADENCE_TICKS == 0;
+
         for (ConfiguredCannonRTP configuredCannonRTP : configuredCannons.values()) {
             Location cannonLocation = configuredCannonRTP.getCannonLocation();
-            if (cannonLocation == null || cannonLocation.getWorld() == null || !configuredCannonRTP.isEnabled() || !configuredCannonRTP.isChunkLoaded()) {
+            if (cannonLocation == null || cannonLocation.getWorld() == null) {
+                configuredCannonRTP.removeVisuals();
                 continue;
             }
-            Collection<Player> nearbyPlayers = getNearbyPlayers(cannonLocation, configuredCannonRTP.getConfigFields().getTriggerRadius());
-            for (Player player : nearbyPlayers) {
-                if (!player.isOnline()) {
-                    continue;
+
+            if (!configuredCannonRTP.isChunkLoaded()) {
+                configuredCannonRTP.removeVisuals();
+                continue;
+            }
+
+            // Visuals (labels always, particles on cadence)
+            configuredCannonRTP.refreshLabel();
+            if (configuredCannonRTP.isEnabled() && configuredCannonRTP.getConfigFields().isEnableParticles()) {
+                if (!getNearbyPlayers(cannonLocation, 36).isEmpty() && visualAnimationTick % particleCadence == 0) {
+                    renderParticleAnimation(configuredCannonRTP, cannonLocation);
                 }
-                if (isOnInteractionCooldown(player.getUniqueId())) {
-                    continue;
-                }
-                if (!player.hasPermission("cannonrtp.use")) {
-                    setInteractionCooldown(player.getUniqueId());
-                    continue;
-                }
-                if (!configuredCannonRTP.canUse(player)) {
-                    MessageUtils.send(player, DefaultConfig.getNoPermissionMessage(), "cannon", configuredCannonRTP.getDisplayName());
-                    setInteractionCooldown(player.getUniqueId());
-                    continue;
-                }
-                if (configuredCannonRTP.getSearchState() == CannonSearchState.INVALID_CONFIGURATION) {
-                    MessageUtils.send(player, DefaultConfig.getInvalidConfigurationMessage(),
-                            "cannon", configuredCannonRTP.getDisplayName(),
-                            "reason", configuredCannonRTP.getLastStatusDetail());
-                    setInteractionCooldown(player.getUniqueId());
-                    continue;
-                }
-                if (configuredCannonRTP.getQueuedLocations().isEmpty()) {
-                    if (configuredCannonRTP.getSearchState() == CannonSearchState.EXHAUSTED) {
-                        MessageUtils.send(player, DefaultConfig.getNoValidLocationFoundMessage(),
-                                "cannon", configuredCannonRTP.getDisplayName(),
-                                "reason", configuredCannonRTP.buildFailureSummary());
-                    } else {
-                        MessageUtils.send(player, DefaultConfig.getQueueCalibrationMessage(),
-                                "cannon", configuredCannonRTP.getDisplayName(),
-                                "queued", String.valueOf(configuredCannonRTP.getQueuedLocations().size()),
-                                "target", String.valueOf(DefaultConfig.getChargedLocationsPerCannon()),
-                                "seconds", String.valueOf(configuredCannonRTP.getSecondsRemaining()));
-                    }
-                    setInteractionCooldown(player.getUniqueId());
-                    continue;
-                }
-                launchPlayer(player, configuredCannonRTP);
-                setInteractionCooldown(player.getUniqueId());
+            }
+
+            // Preload landing locations
+            if (configuredCannonRTP.isEnabled()) {
+                preloadForCannon(configuredCannonRTP);
+            }
+
+            // Scan for new players stepping in
+            if (shouldScanPlayers && configuredCannonRTP.isEnabled()) {
+                scanCannonForPlayers(configuredCannonRTP);
             }
         }
     }
 
-    private void preloadLandingLocations() {
-        for (ConfiguredCannonRTP configuredCannonRTP : configuredCannons.values()) {
-            if (!configuredCannonRTP.isEnabled()) {
-                continue;
+    private void preloadForCannon(ConfiguredCannonRTP configuredCannonRTP) {
+        if (configuredCannonRTP.getSearchState() == CannonSearchState.INVALID_CONFIGURATION ||
+                configuredCannonRTP.getSearchState() == CannonSearchState.EXHAUSTED ||
+                !configuredCannonRTP.needsMoreLocations()) {
+            return;
+        }
+
+        World targetWorld = configuredCannonRTP.getTargetWorld();
+        if (targetWorld == null) {
+            configuredCannonRTP.markInvalidConfiguration("Target world " + configuredCannonRTP.getConfigFields().getTargetWorldName() + " is not loaded.");
+            return;
+        }
+
+        Location searchCenter = configuredCannonRTP.getResolvedSearchCenter();
+        if (searchCenter == null || searchCenter.getWorld() == null) {
+            configuredCannonRTP.markInvalidConfiguration("Search center is invalid.");
+            return;
+        }
+
+        for (int attempt = 0; attempt < DefaultConfig.getSearchAttemptsPerTick() && configuredCannonRTP.needsMoreLocations(); attempt++) {
+            if (configuredCannonRTP.hasTimedOut()) {
+                configuredCannonRTP.exhaustSearch();
+                break;
             }
-            if (!configuredCannonRTP.isChunkLoaded()) {
-                continue;
-            }
-            if (configuredCannonRTP.getSearchState() == CannonSearchState.INVALID_CONFIGURATION ||
-                    configuredCannonRTP.getSearchState() == CannonSearchState.EXHAUSTED ||
-                    !configuredCannonRTP.needsMoreLocations()) {
+            attemptPreload(configuredCannonRTP, targetWorld, searchCenter);
+        }
+    }
+
+    private void scanCannonForPlayers(ConfiguredCannonRTP configuredCannonRTP) {
+        Location cannonLocation = configuredCannonRTP.getCannonLocation();
+        if (cannonLocation == null || cannonLocation.getWorld() == null) return;
+
+        Collection<Player> nearbyPlayers = getNearbyPlayers(cannonLocation, configuredCannonRTP.getConfigFields().getTriggerRadius());
+        for (Player player : nearbyPlayers) {
+            if (!player.isOnline()) continue;
+
+            // Player already in a launch sequence -- skip entirely
+            if (activeLaunches.containsKey(player.getUniqueId())) continue;
+
+            if (!player.hasPermission("cannonrtp.use")) continue;
+
+            if (!configuredCannonRTP.canUse(player)) {
+                MessageUtils.send(player, DefaultConfig.getNoPermissionMessage(), "cannon", configuredCannonRTP.getDisplayName());
                 continue;
             }
 
-            World targetWorld = configuredCannonRTP.getTargetWorld();
-            if (targetWorld == null) {
-                configuredCannonRTP.markInvalidConfiguration("Target world " + configuredCannonRTP.getConfigFields().getTargetWorldName() + " is not loaded.");
+            if (configuredCannonRTP.getSearchState() == CannonSearchState.INVALID_CONFIGURATION) {
+                MessageUtils.send(player, DefaultConfig.getInvalidConfigurationMessage(),
+                        "cannon", configuredCannonRTP.getDisplayName(),
+                        "reason", configuredCannonRTP.getLastStatusDetail());
                 continue;
             }
 
-            Location searchCenter = configuredCannonRTP.getResolvedSearchCenter();
-            if (searchCenter == null || searchCenter.getWorld() == null) {
-                configuredCannonRTP.markInvalidConfiguration("Search center is invalid.");
-                continue;
-            }
-
-            for (int attempt = 0; attempt < DefaultConfig.getSearchAttemptsPerTick() && configuredCannonRTP.needsMoreLocations(); attempt++) {
-                if (configuredCannonRTP.hasTimedOut()) {
-                    configuredCannonRTP.exhaustSearch();
-                    break;
+            if (configuredCannonRTP.getQueuedLocations().isEmpty()) {
+                if (configuredCannonRTP.getSearchState() == CannonSearchState.EXHAUSTED) {
+                    MessageUtils.send(player, DefaultConfig.getNoValidLocationFoundMessage(),
+                            "cannon", configuredCannonRTP.getDisplayName(),
+                            "reason", configuredCannonRTP.buildFailureSummary());
+                } else {
+                    MessageUtils.send(player, DefaultConfig.getQueueCalibrationMessage(),
+                            "cannon", configuredCannonRTP.getDisplayName(),
+                            "queued", String.valueOf(configuredCannonRTP.getQueuedLocations().size()),
+                            "target", String.valueOf(DefaultConfig.getChargedLocationsPerCannon()),
+                            "seconds", String.valueOf(configuredCannonRTP.getSecondsRemaining()));
                 }
-                attemptPreload(configuredCannonRTP, targetWorld, searchCenter);
+                continue;
             }
+
+            // Start launch
+            Location destination = configuredCannonRTP.consumeQueuedLocation();
+            if (destination == null) {
+                MessageUtils.send(player, DefaultConfig.getNoValidLocationYetMessage(), "cannon", configuredCannonRTP.getDisplayName());
+                continue;
+            }
+
+            LaunchSequence sequence = new LaunchSequence(player, configuredCannonRTP, destination);
+            activeLaunches.put(player.getUniqueId(), sequence);
         }
     }
 
@@ -377,291 +405,6 @@ public class CannonRTPManager implements Listener {
         double x = center.getX() + Math.cos(angle) * distance;
         double z = center.getZ() + Math.sin(angle) * distance;
         return new Location(world, x, world.getHighestBlockYAt((int) Math.round(x), (int) Math.round(z)) + 1.0, z);
-    }
-
-    private void renderIdleVisuals() {
-        visualAnimationTick = (visualAnimationTick + 1) % 7200;
-        int particleCadence = Math.max(1, DefaultConfig.getParticleIntervalTicks() / 5);
-        for (ConfiguredCannonRTP configuredCannonRTP : configuredCannons.values()) {
-            Location location = configuredCannonRTP.getCannonLocation();
-            if (location == null || location.getWorld() == null || !configuredCannonRTP.isChunkLoaded()) {
-                configuredCannonRTP.removeVisuals();
-                continue;
-            }
-
-            configuredCannonRTP.refreshLabel();
-            if (!configuredCannonRTP.isEnabled() || !configuredCannonRTP.getConfigFields().isEnableParticles()) {
-                continue;
-            }
-            if (getNearbyPlayers(location, 36).isEmpty()) {
-                continue;
-            }
-            if (visualAnimationTick % particleCadence != 0) {
-                continue;
-            }
-            renderParticleAnimation(configuredCannonRTP, location);
-        }
-    }
-
-    private void launchPlayer(Player player, ConfiguredCannonRTP configuredCannonRTP) {
-        Location destination = configuredCannonRTP.consumeQueuedLocation();
-        if (destination == null) {
-            MessageUtils.send(player, DefaultConfig.getNoValidLocationYetMessage(), "cannon", configuredCannonRTP.getDisplayName());
-            return;
-        }
-
-        player.removePotionEffect(PotionEffectType.LEVITATION);
-        MessageUtils.sendTitle(player,
-                DefaultConfig.getLaunchQueuedTitle(),
-                DefaultConfig.getLaunchQueuedSubtitle(),
-                "cannon", configuredCannonRTP.getDisplayName());
-
-        if (configuredCannonRTP.shouldUseCustomLaunchAnimation()) {
-            runCustomModelLaunchSequence(player, destination, configuredCannonRTP);
-            return;
-        }
-
-        int warmupTicks = configuredCannonRTP.getConfigFields().getLaunchWarmupSeconds() * 20;
-        if (warmupTicks <= 0) {
-            sendLaunchConfirmedTitle(player, destination);
-            boostAndTeleport(player, destination, configuredCannonRTP, false);
-            return;
-        }
-
-        applyWarmupLevitation(player, warmupTicks, 1);
-        new BukkitRunnable() {
-            private int ticksRemaining = warmupTicks;
-
-            @Override
-            public void run() {
-                if (!player.isOnline()) {
-                    cancel();
-                    return;
-                }
-                if (ticksRemaining <= 0) {
-                    cancel();
-                    sendLaunchConfirmedTitle(player, destination);
-                    boostAndTeleport(player, destination, configuredCannonRTP, false);
-                    return;
-                }
-                Location previewLocation = generateCalibrationPreview(configuredCannonRTP, destination);
-                MessageUtils.sendTitle(player,
-                        DefaultConfig.getDestinationPreviewTitle(),
-                        DefaultConfig.getDestinationPreviewSubtitle(),
-                        0,
-                        5,
-                        0,
-                        "x", String.format(Locale.US, "%.1f", previewLocation.getX()),
-                        "y", String.format(Locale.US, "%.1f", previewLocation.getY()),
-                        "z", String.format(Locale.US, "%.1f", previewLocation.getZ()));
-                ticksRemaining--;
-            }
-        }.runTaskTimer(plugin, 0L, 1L);
-    }
-
-    private void runCustomModelLaunchSequence(Player player, Location destination, ConfiguredCannonRTP configuredCannonRTP) {
-        Location cannonLocation = configuredCannonRTP.getCannonLocation();
-        if (cannonLocation == null || cannonLocation.getWorld() == null) {
-            sendLaunchConfirmedTitle(player, destination);
-            boostAndTeleport(player, destination, configuredCannonRTP, false);
-            return;
-        }
-
-        Location cannonSeatLocation = cannonLocation.clone().add(0, 1, 0);
-        applyWarmupLevitation(player, CUSTOM_MODEL_CHARGE_TICKS, 0);
-        player.teleport(cannonSeatLocation);
-        player.setVelocity(new Vector());
-        player.setFallDistance(0);
-
-        new BukkitRunnable() {
-            private int ticksRemaining = CUSTOM_MODEL_CHARGE_TICKS;
-
-            @Override
-            public void run() {
-                if (!player.isOnline()) {
-                    cancel();
-                    return;
-                }
-                if (ticksRemaining <= 0) {
-                    cancel();
-                    player.removePotionEffect(PotionEffectType.LEVITATION);
-                    sendLaunchConfirmedTitle(player, destination);
-                    boostAndTeleport(player, destination, configuredCannonRTP, true);
-                    return;
-                }
-
-                player.teleport(cannonSeatLocation);
-                player.setVelocity(new Vector());
-                player.setFallDistance(0);
-
-                Location previewLocation = generateCalibrationPreview(configuredCannonRTP, destination);
-                MessageUtils.sendTitle(player,
-                        DefaultConfig.getDestinationPreviewTitle(),
-                        DefaultConfig.getDestinationPreviewSubtitle(),
-                        0,
-                        5,
-                        0,
-                        "x", String.format(Locale.US, "%.1f", previewLocation.getX()),
-                        "y", String.format(Locale.US, "%.1f", previewLocation.getY()),
-                        "z", String.format(Locale.US, "%.1f", previewLocation.getZ()));
-                ticksRemaining--;
-            }
-        }.runTaskTimer(plugin, 0L, 1L);
-    }
-
-    private void applyWarmupLevitation(Player player, int durationTicks, int amplifier) {
-        if (durationTicks <= 0) {
-            return;
-        }
-        player.addPotionEffect(new PotionEffect(
-                PotionEffectType.LEVITATION,
-                durationTicks,
-                amplifier,
-                true,
-                false,
-                false));
-        if (DefaultConfig.getLevitationStartSound() != null) {
-            player.playSound(player.getLocation(),
-                    DefaultConfig.getLevitationStartSound(),
-                    DefaultConfig.getLevitationStartSoundVolume(),
-                    DefaultConfig.getLevitationStartSoundPitch());
-        }
-    }
-
-    private void boostAndTeleport(Player player, Location destination, ConfiguredCannonRTP configuredCannonRTP, boolean spawnBlastoffExplosion) {
-        if (DefaultConfig.getBlastOffSound() != null) {
-            player.playSound(player.getLocation(),
-                    DefaultConfig.getBlastOffSound(),
-                    DefaultConfig.getBlastOffSoundVolume(),
-                    DefaultConfig.getBlastOffSoundPitch());
-        }
-        if (spawnBlastoffExplosion) {
-            spawnBlastoffExplosion(player.getLocation());
-        }
-        int verticalBoostTicks = configuredCannonRTP.getConfigFields().getVerticalBoostTicks();
-        double verticalBoostVelocity = configuredCannonRTP.getConfigFields().getVerticalBoostVelocity();
-        if (verticalBoostTicks <= 0 || verticalBoostVelocity <= 0) {
-            completeTeleport(player, destination);
-            return;
-        }
-
-        new BukkitRunnable() {
-            private int ticks = 0;
-
-            @Override
-            public void run() {
-                if (!player.isOnline()) {
-                    cancel();
-                    return;
-                }
-                if (ticks < verticalBoostTicks) {
-                    player.setVelocity(new Vector(0, verticalBoostVelocity, 0));
-                    spawnSmokeTrail(player.getLocation());
-                } else {
-                    completeTeleport(player, destination);
-                    cancel();
-                }
-                ticks++;
-            }
-        }.runTaskTimer(plugin, 0L, 1L);
-    }
-
-    private void completeTeleport(Player player, Location destination) {
-        Location airdropLocation = destination.clone().add(0, 50, 0);
-        World world = airdropLocation.getWorld();
-        if (world != null) {
-            double maxArrivalY = world.getMaxHeight() - 1;
-            if (airdropLocation.getY() > maxArrivalY) {
-                airdropLocation.setY(maxArrivalY);
-            }
-        }
-
-        player.teleport(airdropLocation);
-        player.setFallDistance(0);
-        player.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, DefaultConfig.getSlowFallingSeconds() * 20, 0, true, false, false));
-        trackLanding(player);
-        MessageUtils.sendTitle(player, "", getRandomArrivalSubtitle());
-    }
-
-    private void sendLaunchConfirmedTitle(Player player, Location destination) {
-        MessageUtils.sendTitle(player,
-                DefaultConfig.getDestinationConfirmedTitle(),
-                DefaultConfig.getDestinationConfirmedSubtitle(),
-                "x", String.format(Locale.US, "%.1f", destination.getX()),
-                "y", String.format(Locale.US, "%.1f", destination.getY()),
-                "z", String.format(Locale.US, "%.1f", destination.getZ()),
-                "world", destination.getWorld() == null ? "unknown" : destination.getWorld().getName());
-    }
-
-    private Location generateCalibrationPreview(ConfiguredCannonRTP configuredCannonRTP, Location destination) {
-        World targetWorld = configuredCannonRTP.getTargetWorld();
-        Location searchCenter = configuredCannonRTP.getResolvedSearchCenter();
-        World previewWorld = targetWorld != null ? targetWorld : destination.getWorld();
-        if (previewWorld == null) {
-            return destination.clone();
-        }
-
-        Location anchor = searchCenter != null && searchCenter.getWorld() != null
-                ? searchCenter
-                : previewWorld.getSpawnLocation();
-
-        int maxRadius = Math.max(configuredCannonRTP.getConfigFields().getMinSearchRadius() + 1,
-                configuredCannonRTP.getConfigFields().getMaxSearchRadius());
-        int minRadius = Math.max(0, configuredCannonRTP.getConfigFields().getMinSearchRadius());
-        Location previewLocation = randomizeLocation(previewWorld, anchor, minRadius, maxRadius);
-        previewLocation.setY(Math.max(previewWorld.getMinHeight(), previewLocation.getY()));
-        return previewLocation;
-    }
-
-    private void trackLanding(Player player) {
-        new BukkitRunnable() {
-            private int ticksRemaining = DefaultConfig.getSlowFallingSeconds() * 20;
-
-            @Override
-            public void run() {
-                if (!player.isOnline()) {
-                    cancel();
-                    return;
-                }
-                spawnSmokeTrail(player.getLocation());
-                if (hasLanded(player) || ticksRemaining <= 0) {
-                    player.removePotionEffect(PotionEffectType.SLOW_FALLING);
-                    cancel();
-                    return;
-                }
-
-                ticksRemaining--;
-            }
-        }.runTaskTimer(plugin, 1L, 1L);
-    }
-
-    private boolean hasLanded(Player player) {
-        Location location = player.getLocation();
-        Block feetBlock = location.getBlock();
-        Block supportBlock = location.clone().add(0, -0.2, 0).getBlock();
-
-        if (!feetBlock.isPassable()) {
-            return true;
-        }
-
-        return !supportBlock.isPassable() && Math.abs(player.getVelocity().getY()) < 0.08;
-    }
-
-    private boolean isOnInteractionCooldown(UUID uuid) {
-        Long lastInteraction = interactionCooldowns.get(uuid);
-        return lastInteraction != null && System.currentTimeMillis() - lastInteraction < 3000L;
-    }
-
-    private void setInteractionCooldown(UUID uuid) {
-        interactionCooldowns.put(uuid, System.currentTimeMillis());
-    }
-
-    private String sanitizeId(String id) {
-        return id.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "_");
-    }
-
-    private String resolveFilename(String id) {
-        return id.endsWith(".yml") ? id : sanitizeId(id) + ".yml";
     }
 
     private void renderParticleAnimation(ConfiguredCannonRTP configuredCannonRTP, Location cannonLocation) {
@@ -722,29 +465,6 @@ public class CannonRTPManager implements Listener {
         }
     }
 
-    private void spawnBlastoffExplosion(Location location) {
-        World world = location.getWorld();
-        if (world == null) {
-            return;
-        }
-
-        world.spawnParticle(Particle.EXPLOSION_EMITTER, location.clone().add(0, 0.4, 0), 2, 0.3, 0.3, 0.3, 0.0);
-        world.spawnParticle(Particle.EXPLOSION, location.clone().add(0, 0.4, 0), 12, 0.45, 0.45, 0.45, 0.02);
-        world.spawnParticle(Particle.FLAME, location.clone().add(0, 0.4, 0), 40, 0.3, 0.3, 0.3, 0.08);
-        world.spawnParticle(Particle.LARGE_SMOKE, location.clone().add(0, 0.4, 0), 20, 0.3, 0.3, 0.3, 0.03);
-    }
-
-    private void spawnSmokeTrail(Location location) {
-        World world = location.getWorld();
-        if (world == null) {
-            return;
-        }
-
-        Location smokeLocation = location.clone().add(0, 0.2, 0);
-        world.spawnParticle(Particle.LARGE_SMOKE, smokeLocation, 5, 0.18, 0.18, 0.18, 0.015);
-        world.spawnParticle(Particle.CAMPFIRE_SIGNAL_SMOKE, smokeLocation, 2, 0.12, 0.12, 0.12, 0.0);
-    }
-
     private Collection<Player> getNearbyPlayers(Location location, double radius) {
         Collection<Entity> nearbyEntities = location.getWorld().getNearbyEntities(
                 location,
@@ -759,6 +479,14 @@ public class CannonRTPManager implements Listener {
             }
         }
         return nearbyPlayers;
+    }
+
+    private String sanitizeId(String id) {
+        return id.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "_");
+    }
+
+    private String resolveFilename(String id) {
+        return id.endsWith(".yml") ? id : sanitizeId(id) + ".yml";
     }
 
     private void destroyConfiguredCannonVisuals() {
@@ -802,14 +530,4 @@ public class CannonRTPManager implements Listener {
             }
         }
     }
-
-    private String getRandomArrivalSubtitle() {
-        List<String> arrivalSubtitles = DefaultConfig.getArrivalSubtitles();
-        if (arrivalSubtitles == null || arrivalSubtitles.isEmpty()) {
-            return "<gradient:#ffffff:#cfe8ff>Good luck.</gradient>";
-        }
-        return arrivalSubtitles.get(random.nextInt(arrivalSubtitles.size()));
-    }
 }
-
-
