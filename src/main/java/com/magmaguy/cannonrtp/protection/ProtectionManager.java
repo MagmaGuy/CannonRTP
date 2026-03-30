@@ -1,12 +1,6 @@
 package com.magmaguy.cannonrtp.protection;
 
 import com.magmaguy.cannonrtp.config.DefaultConfig;
-import com.magmaguy.cannonrtp.protection.adapters.GriefPreventionProtectionAdapter;
-import com.magmaguy.cannonrtp.protection.adapters.HuskClaimsProtectionAdapter;
-import com.magmaguy.cannonrtp.protection.adapters.HuskTownsProtectionAdapter;
-import com.magmaguy.cannonrtp.protection.adapters.LandsProtectionAdapter;
-import com.magmaguy.cannonrtp.protection.adapters.TownyProtectionAdapter;
-import com.magmaguy.cannonrtp.protection.adapters.WorldGuardProtectionAdapter;
 import com.magmaguy.magmacore.util.Logger;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -14,26 +8,28 @@ import org.bukkit.Location;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Supplier;
 
 public class ProtectionManager {
     private static final List<ProtectionAdapter> activeAdapters = new ArrayList<>();
 
+    private static final String ADAPTERS_PACKAGE = "com.magmaguy.cannonrtp.protection.adapters.";
+
     public static void initialize() {
         activeAdapters.clear();
-        tryRegister("WorldGuard", DefaultConfig.isWorldGuardEnabled(), WorldGuardProtectionAdapter::new);
-        tryRegister("Towny", DefaultConfig.isTownyEnabled(), TownyProtectionAdapter::new);
-        tryRegister("Lands", DefaultConfig.isLandsEnabled(), LandsProtectionAdapter::new);
-        tryRegister("GriefPrevention", DefaultConfig.isGriefPreventionEnabled(), GriefPreventionProtectionAdapter::new);
-        tryRegister("HuskTowns", DefaultConfig.isHuskTownsEnabled(), HuskTownsProtectionAdapter::new);
-        tryRegister("HuskClaims", DefaultConfig.isHuskClaimsEnabled(), HuskClaimsProtectionAdapter::new);
+        tryRegister("WorldGuard", DefaultConfig.isWorldGuardEnabled(), ADAPTERS_PACKAGE + "WorldGuardProtectionAdapter");
+        tryRegister("Towny", DefaultConfig.isTownyEnabled(), ADAPTERS_PACKAGE + "TownyProtectionAdapter");
+        tryRegister("Lands", DefaultConfig.isLandsEnabled(), ADAPTERS_PACKAGE + "LandsProtectionAdapter");
+        tryRegister("GriefPrevention", DefaultConfig.isGriefPreventionEnabled(), ADAPTERS_PACKAGE + "GriefPreventionProtectionAdapter");
+        tryRegister("HuskTowns", DefaultConfig.isHuskTownsEnabled(), ADAPTERS_PACKAGE + "HuskTownsProtectionAdapter");
+        tryRegister("HuskClaims", DefaultConfig.isHuskClaimsEnabled(), ADAPTERS_PACKAGE + "HuskClaimsProtectionAdapter");
     }
 
-    private static void tryRegister(String pluginName, boolean configEnabled, Supplier<ProtectionAdapter> factory) {
+    private static void tryRegister(String pluginName, boolean configEnabled, String adapterClassName) {
         if (!configEnabled) return;
         if (Bukkit.getPluginManager().getPlugin(pluginName) == null) return;
         try {
-            activeAdapters.add(factory.get());
+            Class<?> clazz = Class.forName(adapterClassName);
+            activeAdapters.add((ProtectionAdapter) clazz.getDeclaredConstructor().newInstance());
             Logger.info("Hooked into " + pluginName + " for landing protection checks.");
         } catch (NoClassDefFoundError | Exception e) {
             Logger.warn("Failed to hook into " + pluginName + ": " + e.getMessage());

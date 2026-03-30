@@ -7,7 +7,7 @@ import org.bukkit.Location;
 public class ExampleCannonRTP extends CannonRTPConfigFields {
     public ExampleCannonRTP() {
         super("example_world_cannon",
-                false,
+                true,
                 "Example World Cannon",
                 defaultLocation(),
                 Bukkit.getWorlds().isEmpty() ? "world" : Bukkit.getWorlds().get(0).getName(),

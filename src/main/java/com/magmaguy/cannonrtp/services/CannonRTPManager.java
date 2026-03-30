@@ -259,7 +259,7 @@ public class CannonRTPManager implements Listener {
             // Visuals (labels always, particles on cadence)
             configuredCannonRTP.refreshLabel();
             if (configuredCannonRTP.isEnabled() && configuredCannonRTP.getConfigFields().isEnableParticles()) {
-                if (!getNearbyPlayers(cannonLocation, 36).isEmpty() && visualAnimationTick % particleCadence == 0) {
+                if (!getNearbyPlayers(cannonLocation, 36).isEmpty()) {
                     renderParticleAnimation(configuredCannonRTP, cannonLocation);
                 }
             }
@@ -416,30 +416,26 @@ public class CannonRTPManager implements Listener {
         Location center = cannonLocation.clone().add(0, 1.0, 0);
         Color primaryColor = configuredCannonRTP.getPrimaryVisualColor();
         Color accentColor = configuredCannonRTP.getAccentVisualColor();
-        double rotation = visualAnimationTick * 0.26;
-        double orbitRadius = 0.78 + Math.sin(visualAnimationTick * 0.14) * 0.05;
+        double rotation = visualAnimationTick * 0.06;
+        double orbitRadius = 0.78 + Math.sin(visualAnimationTick * 0.04) * 0.05;
 
-        for (int trailIndex = 0; trailIndex < 5; trailIndex++) {
-            double trailPhase = trailIndex * 0.32;
-            float size = Math.max(0.6f, 1.0f - trailIndex * 0.08f);
-            spawnOrbitTrack(world, center, rotation - trailPhase, orbitRadius, 0.22, 0.30, primaryColor, accentColor, size, trailIndex == 0);
-            spawnOrbitTrack(world, center, rotation + Math.PI - trailPhase, orbitRadius, 0.22, -0.30, accentColor, primaryColor, size, trailIndex == 0);
-        }
+        spawnOrbitTrack(world, center, rotation, orbitRadius, 0.22, 0.30, primaryColor, accentColor, 1.0f, true);
+        spawnOrbitTrack(world, center, rotation + Math.PI, orbitRadius, 0.22, -0.30, accentColor, primaryColor, 1.0f, true);
 
         world.spawnParticle(
                 Particle.DUST_COLOR_TRANSITION,
-                center.clone().add(0, 0.18 + Math.sin(visualAnimationTick * 0.18) * 0.05, 0),
-                2,
-                0.08,
-                0.08,
-                0.08,
+                center.clone().add(0, 0.18 + Math.sin(visualAnimationTick * 0.04) * 0.05, 0),
+                1,
+                0,
+                0,
+                0,
                 0,
                 new Particle.DustTransition(primaryColor, accentColor, 0.95f));
     }
 
     private void spawnOrbitTrack(World world, Location center, double angle, double radius, double baseHeight, double verticalWaveDirection,
                                  Color fromColor, Color toColor, float size, boolean spawnFireworkTrail) {
-        double verticalWave = Math.sin(angle * 2.0 + visualAnimationTick * 0.08) * 0.20 * verticalWaveDirection;
+        double verticalWave = Math.sin(angle * 2.0 + visualAnimationTick * 0.02) * 0.20 * verticalWaveDirection;
         Location particleLocation = center.clone().add(
                 Math.cos(angle) * radius,
                 baseHeight + verticalWave,
@@ -459,10 +455,6 @@ public class CannonRTPManager implements Listener {
         }
 
         world.spawnParticle(Particle.FIREWORK, particleLocation, 1, 0.015, 0.015, 0.015, 0.0);
-        for (int step = 1; step <= 3; step++) {
-            Location fallingSparkLocation = particleLocation.clone().add(0, -0.16 * step, 0);
-            world.spawnParticle(Particle.FIREWORK, fallingSparkLocation, 1, 0.02, 0.02, 0.02, 0.01);
-        }
     }
 
     private Collection<Player> getNearbyPlayers(Location location, double radius) {

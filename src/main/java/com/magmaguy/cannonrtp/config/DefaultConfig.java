@@ -226,61 +226,61 @@ public class DefaultConfig extends ConfigurationFile {
                 List.of("Prefix used by CannonRTP messages.",
                         "Supports MagmaCore gradients, mini tags and regular color codes."),
                 fileConfiguration, "messages.prefix", "<gradient:#ff9a3d:#ffd166>CannonRTP</gradient> &8|");
-        helpHeader = ConfigurationEngine.setString(
+        helpHeader = ConfigurationEngine.setRawString(
                 List.of("Header shown by /cannonrtp."),
                 fileConfiguration, "messages.helpHeader", "$prefix &fCommands: &e/cannonrtp create <id> [display_name]&f, &e/cannonrtp move <id>&f, &e/cannonrtp delete <id>&f, &e/cannonrtp target <id> <world>&f, &e/cannonrtp center <id>&f, &e/cannonrtp list&f, &e/cannonrtp status&f, &e/cannonrtp probe&f, &e/cannonrtp setup&f, &e/cannonrtp downloadall&f, &e/cannonrtp updatecontent&f, &e/cannonrtp initialize&f, &e/cannonrtp reload");
-        createdCannonMessage = ConfigurationEngine.setString(
+        createdCannonMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent after creating a cannon."),
                 fileConfiguration, "messages.createdCannon", "$prefix &aCreated cannon &f$cannon &7(id: &f$id&7)&a.");
-        deletedCannonMessage = ConfigurationEngine.setString(
+        deletedCannonMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent after deleting a cannon."),
                 fileConfiguration, "messages.deletedCannon", "$prefix &cDeleted cannon &f$cannon&c.");
-        movedCannonMessage = ConfigurationEngine.setString(
+        movedCannonMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent after moving a cannon."),
                 fileConfiguration, "messages.movedCannon", "$prefix &aMoved cannon &f$cannon&a to your current location.");
-        targetWorldUpdatedMessage = ConfigurationEngine.setString(
+        targetWorldUpdatedMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent after changing a cannon target world."),
                 fileConfiguration, "messages.targetWorldUpdated", "$prefix &aCannon &f$cannon &awill now land players in &f$world&a.");
-        searchCenterUpdatedMessage = ConfigurationEngine.setString(
+        searchCenterUpdatedMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent after changing a cannon search center."),
                 fileConfiguration, "messages.searchCenterUpdated", "$prefix &aUpdated the search center for &f$cannon&a.");
-        reloadMessage = ConfigurationEngine.setString(
+        reloadMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent after reloading CannonRTP."),
                 fileConfiguration, "messages.reload", "$prefix &aReloaded CannonRTP. Loaded &f$count &acannons.");
-        noPermissionMessage = ConfigurationEngine.setString(
+        noPermissionMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent when a player can see a cannon but cannot use it."),
                 fileConfiguration, "messages.noPermission", "$prefix &cYou do not have permission to use &f$cannon&c.");
-        cannonDisabledMessage = ConfigurationEngine.setString(
+        cannonDisabledMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent when a player steps into a disabled or invalid cannon."),
                 fileConfiguration, "messages.cannonDisabled", "$prefix &cCannon &f$cannon &cis disabled or not ready yet.");
-        queueCalibrationMessage = ConfigurationEngine.setString(
+        queueCalibrationMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent while a cannon is still preloading valid locations."),
                 fileConfiguration, "messages.queueCalibration", "$prefix &e$cannon is still calibrating safe landing locations. &7($queued/$target ready, $seconds s left)");
-        noValidLocationYetMessage = ConfigurationEngine.setString(
+        noValidLocationYetMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent when a cannon has not found its first safe location yet."),
                 fileConfiguration, "messages.noValidLocationYet", "$prefix &eNo valid landing location exists yet for &f$cannon&e. It is still searching.");
-        noValidLocationFoundMessage = ConfigurationEngine.setString(
+        noValidLocationFoundMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent when CannonRTP gives up after timing out."),
                 fileConfiguration, "messages.noValidLocationFound", "$prefix &cNo valid landing location could be found for &f$cannon&c. Most likely reasons: &f$reason&c.");
-        invalidConfigurationMessage = ConfigurationEngine.setString(
+        invalidConfigurationMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent when the target world or search center configuration is invalid."),
                 fileConfiguration, "messages.invalidConfiguration", "$prefix &cCannon &f$cannon &chas an invalid configuration: &f$reason&c.");
-        launchQueuedTitle = ConfigurationEngine.setString(
+        launchQueuedTitle = ConfigurationEngine.setRawString(
                 List.of("Title shown when a launch starts."),
-                fileConfiguration, "messages.titles.launchQueuedTitle", "<gradient:#ff8a3d:#ffd166>Launch sequence engaged</gradient>");
-        launchQueuedSubtitle = ConfigurationEngine.setString(
+                fileConfiguration, "messages.titles.launchQueuedTitle", "<gradient:#ff8a3d:#ffd166>Launching</gradient>");
+        launchQueuedSubtitle = ConfigurationEngine.setRawString(
                 List.of("Subtitle shown when a launch starts."),
-                fileConfiguration, "messages.titles.launchQueuedSubtitle", "<gradient:#fff4c2:#ffc36b>Spooling vectors for $cannon</gradient>");
-        destinationPreviewTitle = ConfigurationEngine.setString(
+                fileConfiguration, "messages.titles.launchQueuedSubtitle", "<gradient:#fff4c2:#ffc36b>$cannon</gradient>");
+        destinationPreviewTitle = ConfigurationEngine.setRawString(
                 List.of("Title shown while previewing the chosen destination."),
-                fileConfiguration, "messages.titles.destinationPreviewTitle", "<gradient:#ff9f43:#ffe08a>Calibrating destination</gradient>");
-        destinationPreviewSubtitle = ConfigurationEngine.setString(
+                fileConfiguration, "messages.titles.destinationPreviewTitle", "<gradient:#ff9f43:#ffe08a>Calibrating</gradient>");
+        destinationPreviewSubtitle = ConfigurationEngine.setRawString(
                 List.of("Subtitle shown while previewing the chosen destination."),
                 fileConfiguration, "messages.titles.destinationPreviewSubtitle", "<gradient:#fef3d0:#ffcb75>$x</gradient> &8| <gradient:#fef3d0:#ffcb75>$y</gradient> &8| <gradient:#fef3d0:#ffcb75>$z</gradient>");
-        destinationConfirmedTitle = ConfigurationEngine.setString(
+        destinationConfirmedTitle = ConfigurationEngine.setRawString(
                 List.of("Title shown right before teleporting."),
-                fileConfiguration, "messages.titles.destinationConfirmedTitle", "<gradient:#7dffb3:#d7ff95>Launch confirmed</gradient>");
-        destinationConfirmedSubtitle = ConfigurationEngine.setString(
+                fileConfiguration, "messages.titles.destinationConfirmedTitle", "<gradient:#7dffb3:#d7ff95>Locked</gradient>");
+        destinationConfirmedSubtitle = ConfigurationEngine.setRawString(
                 List.of("Subtitle shown right before teleporting."),
                 fileConfiguration, "messages.titles.destinationConfirmedSubtitle", "<gradient:#d7fff1:#92f7c6>$x</gradient> &8| <gradient:#d7fff1:#92f7c6>$y</gradient> &8| <gradient:#d7fff1:#92f7c6>$z</gradient> &8in <gradient:#ffffff:#bfe7ff>$world</gradient>");
         arrivalSubtitles = Collections.unmodifiableList(asStringList(ConfigurationEngine.setList(
@@ -292,16 +292,16 @@ public class DefaultConfig extends ConfigurationFile {
                         "<gradient:#ffe8c4:#ffd27a>Eyes up. Ground soon.</gradient>",
                         "<gradient:#e6f8ff:#9ee0ff>Wind check complete. Good luck.</gradient>",
                         "<gradient:#fff0d7:#ffc97d>Drop zone acquired. Good luck.</gradient>"))));
-        statusLineMessage = ConfigurationEngine.setString(
+        statusLineMessage = ConfigurationEngine.setRawString(
                 List.of("Line format used by /cannonrtp status."),
                 fileConfiguration, "messages.statusLine", "$prefix &f$cannon &8- &e$status &8- &f$queued/$target ready &8- &7$reason");
-        probeAllowedMessage = ConfigurationEngine.setString(
+        probeAllowedMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent by /cannonrtp probe when the location is safe."),
                 fileConfiguration, "messages.probeAllowed", "$prefix &aThis location is currently valid for random landings.");
-        probeBlockedMessage = ConfigurationEngine.setString(
+        probeBlockedMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent by /cannonrtp probe when the location is blocked."),
                 fileConfiguration, "messages.probeBlocked", "$prefix &cThis location is blocked by &f$plugin&c: &f$reason");
-        unknownCommandMessage = ConfigurationEngine.setString(
+        unknownCommandMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent when an admin uses an invalid command."),
                 fileConfiguration, "messages.unknownCommand", "$prefix &cUnknown command. Use &f/cannonrtp &cfor help.");
 

@@ -80,9 +80,6 @@ public class LaunchSequence {
             enterSearching();
         }
 
-        // Anchor player at seat
-        player.teleport(seatLocation);
-        player.setVelocity(new Vector());
         player.setFallDistance(0);
 
         // Randomized coordinate display every tick
@@ -151,7 +148,7 @@ public class LaunchSequence {
         }
 
         player.setVelocity(new Vector(0, verticalBoostVelocity, 0));
-        spawnSmokeTrail(player.getLocation());
+        spawnSmokeTrail(player.getLocation(), 0);
 
         if (phaseTick >= firingDurationTicks - 1) {
             transitionTo(LaunchPhase.TELEPORTING);
@@ -208,7 +205,7 @@ public class LaunchSequence {
     // --- DROPPING: smoke trail, check for landing ---
 
     private void tickDropping() {
-        spawnSmokeTrail(player.getLocation());
+        spawnSmokeTrail(player.getLocation(), 3);
 
         if (hasLanded() || phaseTick >= maxDroppingTicks) {
             transitionTo(LaunchPhase.LANDING);
@@ -270,10 +267,10 @@ public class LaunchSequence {
         return titles.get(random.nextInt(titles.size()));
     }
 
-    private void spawnSmokeTrail(Location location) {
+    private void spawnSmokeTrail(Location location, double yOffset) {
         World world = location.getWorld();
         if (world == null) return;
-        Location smokeLocation = location.clone().add(0, 0.2, 0);
+        Location smokeLocation = location.clone().add(0, yOffset, 0);
         world.spawnParticle(Particle.LARGE_SMOKE, smokeLocation, 5, 0.18, 0.18, 0.18, 0.015);
         world.spawnParticle(Particle.CAMPFIRE_SIGNAL_SMOKE, smokeLocation, 2, 0.12, 0.12, 0.12, 0.0);
     }
@@ -291,13 +288,18 @@ public class LaunchSequence {
     private void spawnLandingImpact(Location location) {
         World world = location.getWorld();
         if (world == null) return;
-        Location impactLoc = location.clone().add(0, 0.1, 0);
-        // Ring of dust particles expanding outward
-        world.spawnParticle(Particle.CLOUD, impactLoc, 20, 0.6, 0.1, 0.6, 0.05);
-        world.spawnParticle(Particle.CAMPFIRE_SIGNAL_SMOKE, impactLoc, 8, 0.3, 0.05, 0.3, 0.02);
-        // Small upward puff
-        world.spawnParticle(Particle.DUST_COLOR_TRANSITION, impactLoc.clone().add(0, 0.3, 0),
-                12, 0.4, 0.2, 0.4, 0,
-                new Particle.DustTransition(Color.fromRGB(200, 200, 200), Color.fromRGB(120, 120, 120), 1.2f));
+        Location impactLoc = location.clone();
+        // Large shockwave ring expanding outward
+        world.spawnParticle(Particle.CLOUD, impactLoc, 60, 1.5, 0.2, 1.5, 0.15);
+        world.spawnParticle(Particle.CAMPFIRE_SIGNAL_SMOKE, impactLoc, 30, 1.0, 0.3, 1.0, 0.08);
+        // Explosion flash
+        world.spawnParticle(Particle.EXPLOSION, impactLoc, 5, 0.5, 0.3, 0.5, 0.02);
+        world.spawnParticle(Particle.FLAME, impactLoc, 40, 1.2, 0.2, 1.2, 0.1);
+        // Upward smoke column
+        world.spawnParticle(Particle.LARGE_SMOKE, impactLoc.clone().add(0, 0.5, 0), 25, 0.4, 0.8, 0.4, 0.06);
+        // Dust ring
+        world.spawnParticle(Particle.DUST_COLOR_TRANSITION, impactLoc,
+                30, 1.8, 0.15, 1.8, 0.1,
+                new Particle.DustTransition(Color.fromRGB(255, 220, 160), Color.fromRGB(180, 140, 100), 1.8f));
     }
 }
