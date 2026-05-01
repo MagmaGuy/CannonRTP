@@ -6,7 +6,7 @@ import java.util.ArrayList;
 
 public class ExampleCannonRTP extends CannonRTPConfigFields {
     public ExampleCannonRTP() {
-        super("example_world_cannon",
+        super("example_cannonrtp",
                 false,
                 "Example World Cannon",
                 new ArrayList<>(),

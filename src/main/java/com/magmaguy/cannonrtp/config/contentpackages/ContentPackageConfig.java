@@ -1,6 +1,6 @@
 package com.magmaguy.cannonrtp.config.contentpackages;
 
-import com.magmaguy.cannonrtp.content.WorldCannonPackage;
+import com.magmaguy.cannonrtp.content.CannonRTPPackage;
 import com.magmaguy.magmacore.config.CustomConfig;
 import lombok.Getter;
 
@@ -17,7 +17,7 @@ public class ContentPackageConfig extends CustomConfig {
         for (Map.Entry<String, ? extends com.magmaguy.magmacore.config.CustomConfigFields> entry : super.getCustomConfigFieldsHashMap().entrySet()) {
             ContentPackageConfigFields fields = (ContentPackageConfigFields) entry.getValue();
             contentPackages.put(entry.getKey(), fields);
-            new WorldCannonPackage(fields);
+            new CannonRTPPackage(fields);
         }
     }
 }

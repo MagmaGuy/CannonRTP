@@ -1,8 +1,8 @@
 package com.magmaguy.cannonrtp.menus;
 
 import com.magmaguy.cannonrtp.MetadataHandler;
-import com.magmaguy.cannonrtp.content.WorldCannonPackage;
-import com.magmaguy.cannonrtp.content.WorldCannonPackageRefresher;
+import com.magmaguy.cannonrtp.content.CannonRTPPackage;
+import com.magmaguy.cannonrtp.content.CannonRTPPackageRefresher;
 import com.magmaguy.magmacore.menus.ContentPackage;
 import com.magmaguy.magmacore.menus.MenuButton;
 import com.magmaguy.magmacore.menus.SetupMenu;
@@ -21,16 +21,16 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class WorldCannonSetupMenu {
-    private WorldCannonSetupMenu() {
+public class CannonRTPSetupMenu {
+    private CannonRTPSetupMenu() {
     }
 
     public static void createMenu(Player player) {
-        List<WorldCannonPackage> packages = new ArrayList<>(WorldCannonPackage.getWorldCannonPackages().values()).stream()
+        List<CannonRTPPackage> packages = new ArrayList<>(CannonRTPPackage.getCannonRTPPackages().values()).stream()
                 .sorted(Comparator.comparing(pkg ->
                         ChatColor.stripColor(ChatColorConverter.convert(pkg.getContentPackageConfigFields().getName()))))
                 .collect(Collectors.toList());
-        WorldCannonPackageRefresher.refreshContentAndAccess();
+        CannonRTPPackageRefresher.refreshContentAndAccess();
 
         MenuButton infoButton = new MenuButton(ItemStackGenerator.generateSkullItemStack("magmaguy",
                 "&2Installation instructions:",
@@ -50,9 +50,9 @@ public class WorldCannonSetupMenu {
                                 "https://nightbreak.io/account/"));
                 p.spigot().sendMessage(
                         SpigotMessage.simpleMessage("&2&lContent: "),
-                        SpigotMessage.hoverLinkMessage("&ahttps://nightbreak.io/plugin/world_cannon/",
+                        SpigotMessage.hoverLinkMessage("&ahttps://nightbreak.io/plugin/cannonrtp/",
                                 "&7Click to browse CannonRTP content.",
-                                "https://nightbreak.io/plugin/world_cannon/"));
+                                "https://nightbreak.io/plugin/cannonrtp/"));
                 p.spigot().sendMessage(
                         SpigotMessage.commandHoverMessage("&2&lBulk download: &a/wc downloadall",
                                 "&7Click to download all available CannonRTP content.",
@@ -68,9 +68,9 @@ public class WorldCannonSetupMenu {
         };
 
         List<ContentPackage> allPackages = new ArrayList<>(packages);
-        allPackages.add(new DownloadAllContentPackage<>(() -> new ArrayList<>(WorldCannonPackage.getWorldCannonPackages().values()),
+        allPackages.add(new DownloadAllContentPackage<>(() -> new ArrayList<>(CannonRTPPackage.getCannonRTPPackages().values()),
                 "CannonRTP",
-                "https://nightbreak.io/plugin/world_cannon/",
+                "https://nightbreak.io/plugin/cannonrtp/",
                 "wc downloadall"));
 
         new SetupMenu((JavaPlugin) MetadataHandler.PLUGIN, player, infoButton, allPackages, List.of(), "Setup menu");

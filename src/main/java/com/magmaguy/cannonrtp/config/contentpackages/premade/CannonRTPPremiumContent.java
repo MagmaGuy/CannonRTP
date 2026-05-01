@@ -4,8 +4,8 @@ import com.magmaguy.cannonrtp.config.contentpackages.ContentPackageConfigFields;
 
 import java.util.List;
 
-public class WorldCannonPremiumContent extends ContentPackageConfigFields {
-    public WorldCannonPremiumContent() {
+public class CannonRTPPremiumContent extends ContentPackageConfigFields {
+    public CannonRTPPremiumContent() {
         super("cannonrtp_premium",
                 true,
                 "&5Premium CannonRTP",

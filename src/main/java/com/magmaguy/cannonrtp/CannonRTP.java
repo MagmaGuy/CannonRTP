@@ -8,8 +8,8 @@ import com.magmaguy.cannonrtp.config.DefaultConfig;
 import com.magmaguy.cannonrtp.config.LandingSearchConfig;
 import com.magmaguy.cannonrtp.config.ProtectionSettingsConfig;
 import com.magmaguy.cannonrtp.config.contentpackages.ContentPackageConfig;
-import com.magmaguy.cannonrtp.content.WorldCannonPackage;
-import com.magmaguy.cannonrtp.content.WorldCannonPackageRefresher;
+import com.magmaguy.cannonrtp.content.CannonRTPPackage;
+import com.magmaguy.cannonrtp.content.CannonRTPPackageRefresher;
 import com.magmaguy.cannonrtp.listeners.ChunkLifecycleListener;
 import com.magmaguy.cannonrtp.listeners.FMMIntegrationListener;
 import com.magmaguy.cannonrtp.listeners.PlayerQuitListener;
@@ -39,7 +39,7 @@ public final class CannonRTP extends JavaPlugin {
             "cannonrtp.admin",
             "cannonrtp.admin",
             "cannonrtp.admin",
-            "https://nightbreak.io/plugin/world_cannon/",
+            "https://nightbreak.io/plugin/cannonrtp/",
             "Reloaded CannonRTP.",
             true, false, true);
     public static final NightbreakFirstTimeSetupSpec FIRST_TIME_SETUP_SPEC = new NightbreakFirstTimeSetupSpec(
@@ -48,7 +48,7 @@ public final class CannonRTP extends JavaPlugin {
             null,
             "/wc setup",
             "/wc downloadall",
-            "https://nightbreak.io/plugin/world_cannon/",
+            "https://nightbreak.io/plugin/cannonrtp/",
             "",
             java.util.List.of(),
             java.util.List.of());
@@ -62,6 +62,7 @@ public final class CannonRTP extends JavaPlugin {
         instance = this;
         MetadataHandler.PLUGIN = this;
         MagmaCore.createInstance(this);
+        MagmaCore.exportSharedAssets(this);
     }
 
     @Override
@@ -99,8 +100,8 @@ public final class CannonRTP extends JavaPlugin {
             getServer().getScheduler().cancelTasks(this);
             MagmaCore.shutdown(this);
             HandlerList.unregisterAll(this);
-            WorldCannonPackage.shutdown();
-            WorldCannonPackageRefresher.reset();
+            CannonRTPPackage.shutdown();
+            CannonRTPPackageRefresher.reset();
             Logger.info("[CannonRTP] Shutdown during initialization.");
             return;
         }
@@ -109,8 +110,8 @@ public final class CannonRTP extends JavaPlugin {
         }
         getServer().getScheduler().cancelTasks(this);
         HandlerList.unregisterAll(this);
-        WorldCannonPackage.shutdown();
-        WorldCannonPackageRefresher.reset();
+        CannonRTPPackage.shutdown();
+        CannonRTPPackageRefresher.reset();
         MagmaCore.shutdown(this);
     }
 
@@ -157,7 +158,7 @@ public final class CannonRTP extends JavaPlugin {
         initializationContext.step("Version Check");
         String resourceId = DefaultConfig.getSpigotResourceId();
         if (resourceId != null && !resourceId.isBlank()) {
-            VersionChecker.VersionCheckerEvents.setDownloadURL("https://nightbreak.io/plugin/world_cannon/");
+            VersionChecker.VersionCheckerEvents.setDownloadURL("https://nightbreak.io/plugin/cannonrtp/");
             VersionChecker.checkPluginVersion(resourceId);
         }
 

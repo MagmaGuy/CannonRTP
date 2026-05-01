@@ -14,8 +14,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.List;
 
-public class WorldCannonFirstTimeSetupMenu {
-    private WorldCannonFirstTimeSetupMenu() {
+public class CannonRTPFirstTimeSetupMenu {
+    private CannonRTPFirstTimeSetupMenu() {
     }
 
     public static void createMenu(Player player) {

@@ -16,19 +16,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-public class WorldCannonPackage extends AbstractNightbreakContentPackage {
+public class CannonRTPPackage extends AbstractNightbreakContentPackage {
     @Getter
-    private static final Map<String, WorldCannonPackage> worldCannonPackages = new HashMap<>();
+    private static final Map<String, CannonRTPPackage> cannonRTPPackages = new HashMap<>();
     @Getter
     private final ContentPackageConfigFields contentPackageConfigFields;
 
-    public WorldCannonPackage(ContentPackageConfigFields contentPackageConfigFields) {
+    public CannonRTPPackage(ContentPackageConfigFields contentPackageConfigFields) {
         this.contentPackageConfigFields = contentPackageConfigFields;
-        worldCannonPackages.put(contentPackageConfigFields.getFilename(), this);
+        cannonRTPPackages.put(contentPackageConfigFields.getFilename(), this);
     }
 
     public static void shutdown() {
-        worldCannonPackages.clear();
+        cannonRTPPackages.clear();
     }
 
     @Override
@@ -99,7 +99,7 @@ public class WorldCannonPackage extends AbstractNightbreakContentPackage {
 
     @Override
     protected String getContentPageUrl() {
-        return "https://nightbreak.io/plugin/world_cannon/";
+        return "https://nightbreak.io/plugin/cannonrtp/";
     }
 
     @Override

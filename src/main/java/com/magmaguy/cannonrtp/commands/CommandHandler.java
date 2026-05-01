@@ -1,9 +1,9 @@
 package com.magmaguy.cannonrtp.commands;
 
 import com.magmaguy.cannonrtp.CannonRTP;
-import com.magmaguy.cannonrtp.content.WorldCannonPackage;
-import com.magmaguy.cannonrtp.menus.WorldCannonFirstTimeSetupMenu;
-import com.magmaguy.cannonrtp.menus.WorldCannonSetupMenu;
+import com.magmaguy.cannonrtp.content.CannonRTPPackage;
+import com.magmaguy.cannonrtp.menus.CannonRTPFirstTimeSetupMenu;
+import com.magmaguy.cannonrtp.menus.CannonRTPSetupMenu;
 import com.magmaguy.cannonrtp.services.CannonRTPManager;
 import com.magmaguy.magmacore.command.CommandManager;
 import com.magmaguy.magmacore.nightbreak.NightbreakPluginBootstrap;
@@ -26,9 +26,9 @@ public final class CommandHandler {
         NightbreakPluginBootstrap.registerStandardCommands(plugin,
                 cannonRTPCommandManager,
                 CannonRTP.NIGHTBREAK_PLUGIN_SPEC,
-                WorldCannonSetupMenu::createMenu,
-                WorldCannonFirstTimeSetupMenu::createMenu,
-                () -> new java.util.ArrayList<>(WorldCannonPackage.getWorldCannonPackages().values()),
+                CannonRTPSetupMenu::createMenu,
+                CannonRTPFirstTimeSetupMenu::createMenu,
+                () -> new java.util.ArrayList<>(CannonRTPPackage.getCannonRTPPackages().values()),
                 ReloadCommand::reload);
         cannonRTPCommandManager.registerCommand(new ListCannonsCommand(cannonRTPManager));
         cannonRTPCommandManager.registerCommand(new StatusCommand(cannonRTPManager));

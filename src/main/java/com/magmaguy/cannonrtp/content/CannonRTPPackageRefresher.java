@@ -6,11 +6,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
 
-public class WorldCannonPackageRefresher {
+public class CannonRTPPackageRefresher {
     private static final long REFRESH_COOLDOWN_MS = 5 * 60 * 1000L;
     private static long lastRefresh = 0L;
 
-    private WorldCannonPackageRefresher() {
+    private CannonRTPPackageRefresher() {
     }
 
     public static void refreshContentAndAccess() {
@@ -19,8 +19,8 @@ public class WorldCannonPackageRefresher {
         lastRefresh = now;
         NightbreakContentRefresher.refreshAsync(
                 (JavaPlugin) MetadataHandler.PLUGIN,
-                new ArrayList<>(WorldCannonPackage.getWorldCannonPackages().values()),
-                worldCannonPackage -> true,
+                new ArrayList<>(CannonRTPPackage.getCannonRTPPackages().values()),
+                cannonRTPPackage -> true,
                 outdated -> {
                 });
     }

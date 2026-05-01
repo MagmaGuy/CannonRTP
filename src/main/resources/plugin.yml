@@ -2,7 +2,7 @@ name: CannonRTP
 version: ${project.version}
 author: MagmaGuy
 main: com.magmaguy.cannonrtp.CannonRTP
-api-version: '1.21'
+api-version: '1.21.4'
 softdepend: [WorldGuard, Towny, Lands, GriefPrevention, HuskTowns, HuskClaims, FreeMinecraftModels]
 
 commands:
