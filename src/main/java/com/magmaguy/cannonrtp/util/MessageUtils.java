@@ -1,7 +1,7 @@
 package com.magmaguy.cannonrtp.util;
 
 import com.magmaguy.magmacore.util.ChatColorConverter;
-import com.magmaguy.cannonrtp.config.DefaultConfig;
+import com.magmaguy.cannonrtp.config.CannonMessagesConfig;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
@@ -31,7 +31,7 @@ public final class MessageUtils {
     }
 
     public static String format(String template, String... placeholders) {
-        String formatted = template.replace("$prefix", DefaultConfig.getPrefix());
+        String formatted = template.replace("$prefix", CannonMessagesConfig.getPrefix());
         for (int index = 0; index + 1 < placeholders.length; index += 2) {
             formatted = formatted.replace("$" + placeholders[index], placeholders[index + 1]);
         }

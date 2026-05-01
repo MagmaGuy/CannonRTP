@@ -1,6 +1,6 @@
 package com.magmaguy.cannonrtp.protection.adapters;
 
-import com.magmaguy.cannonrtp.config.DefaultConfig;
+import com.magmaguy.cannonrtp.config.ProtectionSettingsConfig;
 import com.magmaguy.cannonrtp.protection.ProtectionAdapter;
 import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
 import net.william278.huskclaims.api.BukkitHuskClaimsAPI;
@@ -22,17 +22,17 @@ public class HuskClaimsProtectionAdapter implements ProtectionAdapter {
         BukkitHuskClaimsAPI api = BukkitHuskClaimsAPI.getInstance();
         Optional<Claim> claim = api.getClaimAt(api.getPosition(location));
         if (claim.isEmpty()) {
-            return DefaultConfig.isHuskClaimsAllowWilderness()
+            return ProtectionSettingsConfig.isHuskClaimsAllowWilderness()
                     ? ProtectionQueryResult.pass()
                     : blocked("HuskClaims wilderness");
         }
 
         if (claim.get().isAdminClaim()) {
-            return DefaultConfig.isHuskClaimsAllowAdminClaims()
+            return ProtectionSettingsConfig.isHuskClaimsAllowAdminClaims()
                     ? ProtectionQueryResult.pass()
                     : blocked("a HuskClaims admin claim");
         }
-        return DefaultConfig.isHuskClaimsAllowPlayerClaims()
+        return ProtectionSettingsConfig.isHuskClaimsAllowPlayerClaims()
                 ? ProtectionQueryResult.pass()
                 : blocked("a HuskClaims player claim");
     }

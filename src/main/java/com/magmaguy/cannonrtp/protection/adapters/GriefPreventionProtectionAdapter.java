@@ -1,6 +1,6 @@
 package com.magmaguy.cannonrtp.protection.adapters;
 
-import com.magmaguy.cannonrtp.config.DefaultConfig;
+import com.magmaguy.cannonrtp.config.ProtectionSettingsConfig;
 import com.magmaguy.cannonrtp.protection.ProtectionAdapter;
 import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
 import me.ryanhamshire.GriefPrevention.Claim;
@@ -24,18 +24,18 @@ public class GriefPreventionProtectionAdapter implements ProtectionAdapter {
 
         Claim claim = griefPrevention.dataStore.getClaimAt(location, false, null);
         if (claim == null) {
-            return DefaultConfig.isGriefPreventionAllowWilderness()
+            return ProtectionSettingsConfig.isGriefPreventionAllowWilderness()
                     ? ProtectionQueryResult.pass()
                     : blocked("GriefPrevention wilderness");
         }
 
         if (claim.isAdminClaim()) {
-            return DefaultConfig.isGriefPreventionAllowAdminClaims()
+            return ProtectionSettingsConfig.isGriefPreventionAllowAdminClaims()
                     ? ProtectionQueryResult.pass()
                     : blocked("a GriefPrevention admin claim");
         }
 
-        return DefaultConfig.isGriefPreventionAllowPlayerClaims()
+        return ProtectionSettingsConfig.isGriefPreventionAllowPlayerClaims()
                 ? ProtectionQueryResult.pass()
                 : blocked("a GriefPrevention player claim");
     }

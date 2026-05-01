@@ -1,6 +1,6 @@
 package com.magmaguy.cannonrtp.protection.adapters;
 
-import com.magmaguy.cannonrtp.config.DefaultConfig;
+import com.magmaguy.cannonrtp.config.ProtectionSettingsConfig;
 import com.magmaguy.cannonrtp.protection.ProtectionAdapter;
 import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
@@ -40,19 +40,19 @@ public class WorldGuardProtectionAdapter implements ProtectionAdapter {
             onlyGlobal = false;
 
             StateFlag.State passthrough = region.getFlag(Flags.PASSTHROUGH);
-            if (DefaultConfig.isWorldGuardAllowPassthroughRegions() && passthrough == StateFlag.State.ALLOW) {
+            if (ProtectionSettingsConfig.isWorldGuardAllowPassthroughRegions() && passthrough == StateFlag.State.ALLOW) {
                 continue;
             }
 
             StateFlag.State build = region.getFlag(Flags.BUILD);
-            if (DefaultConfig.isWorldGuardAllowBuildAllowedRegions() && build == StateFlag.State.ALLOW) {
+            if (ProtectionSettingsConfig.isWorldGuardAllowBuildAllowedRegions() && build == StateFlag.State.ALLOW) {
                 continue;
             }
 
             return blocked("protected region " + regionId);
         }
 
-        if (onlyGlobal && DefaultConfig.isWorldGuardAllowGlobalRegionOnly()) {
+        if (onlyGlobal && ProtectionSettingsConfig.isWorldGuardAllowGlobalRegionOnly()) {
             return ProtectionQueryResult.pass();
         }
 

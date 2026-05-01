@@ -1,14 +1,14 @@
 package com.magmaguy.cannonrtp.services;
 
-import com.magmaguy.cannonrtp.config.DefaultConfig;
 import com.magmaguy.cannonrtp.config.CannonRTPConfigFields;
+import com.magmaguy.cannonrtp.config.DefaultConfig;
+import com.magmaguy.cannonrtp.config.LandingSearchConfig;
 import com.magmaguy.freeminecraftmodels.api.ModeledEntityManager;
 import com.magmaguy.freeminecraftmodels.customentity.StaticEntity;
 import com.magmaguy.magmacore.util.ChatColorConverter;
-import com.magmaguy.magmacore.util.ChunkLocationChecker;
+import com.magmaguy.magmacore.util.ConfigurationLocation;
 import lombok.Getter;
 import org.bukkit.Bukkit;
-import org.bukkit.Chunk;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -21,31 +21,164 @@ import java.util.EnumMap;
 import java.util.Map;
 
 public class ConfiguredCannonRTP {
+    /**
+     * The configuration file's id (filename without .yml). Multiple ConfiguredCannonRTP
+     * instances share the same configId when one config drives several in-world
+     * placements. Used by API events and command lookups.
+     */
     @Getter
-    private final String id;
+    private final String configId;
+    /**
+     * Unique id for this specific in-world placement. Formatted "{configId}#{index}"
+     * where index matches the entry in {@link CannonRTPConfigFields#getCannonLocations()}.
+     */
+    @Getter
+    private final String instanceId;
     @Getter
     private final CannonRTPConfigFields configFields;
+    /**
+     * The serialized location string that produced this instance. Kept so removal
+     * commands can match the exact list entry that spawned this cannon.
+     */
+    @Getter
+    private final String locationString;
     @Getter
     private final ArrayDeque<Location> queuedLocations = new ArrayDeque<>();
     private final Map<SearchFailureReason, Integer> failures = new EnumMap<>(SearchFailureReason.class);
+    private final Map<java.util.UUID, Long> lastNotifyMs = new java.util.HashMap<>();
+
     @Getter
     private CannonSearchState searchState = CannonSearchState.SEARCHING;
     @Getter
     private int searchAttempts = 0;
-    private long searchStartedAt = System.currentTimeMillis();
     @Getter
     private String lastStatusDetail = "Still searching.";
     private TextDisplay labelDisplay;
     private StaticEntity staticModel;
     private String lastLabelText = "";
 
-    public ConfiguredCannonRTP(String id, CannonRTPConfigFields configFields) {
-        this.id = id;
+    @Getter
+    private Location cannonLocation;
+    @Getter
+    private boolean chunkLoaded;
+    @Getter
+    private boolean cannonWorldLoaded;
+    private World cachedTargetWorld;
+    private int cannonChunkX;
+    private int cannonChunkZ;
+
+    private Boolean cachedUseCustomModel;
+    private String cachedResolvedModelName;
+    private boolean lastLabelHasModel = false;
+
+    public ConfiguredCannonRTP(String configId,
+                               String instanceId,
+                               CannonRTPConfigFields configFields,
+                               Location cannonLocation,
+                               String locationString) {
+        this.configId = configId;
+        this.instanceId = instanceId;
         this.configFields = configFields;
+        this.locationString = locationString;
+        this.cannonLocation = cannonLocation;
+        if (cannonLocation != null && cannonLocation.getWorld() != null) {
+            this.cannonWorldLoaded = true;
+            this.cannonChunkX = cannonLocation.getBlockX() >> 4;
+            this.cannonChunkZ = cannonLocation.getBlockZ() >> 4;
+            this.chunkLoaded = cannonLocation.getWorld().isChunkLoaded(cannonChunkX, cannonChunkZ);
+        }
     }
 
-    public Location getCannonLocation() {
-        return configFields.getCannonLocation();
+    public String getCannonWorldName() {
+        return cannonLocation != null && cannonLocation.getWorld() != null
+                ? cannonLocation.getWorld().getName()
+                : null;
+    }
+
+    public int getCannonChunkX() {
+        return cannonChunkX;
+    }
+
+    public int getCannonChunkZ() {
+        return cannonChunkZ;
+    }
+
+    public void setChunkLoaded(boolean loaded) {
+        this.chunkLoaded = loaded;
+    }
+
+    /**
+     * Re-parses {@link #locationString} so the stored {@link Location} picks up the
+     * freshly loaded world. Called by the world-lifecycle listener when a world
+     * this cannon is bound to comes online after the plugin finished initializing.
+     */
+    public void refreshWorldReference() {
+        Location newLocation = ConfigurationLocation.serialize(locationString);
+        if (newLocation == null || newLocation.getWorld() == null) {
+            cannonWorldLoaded = false;
+            chunkLoaded = false;
+            return;
+        }
+        cannonLocation = newLocation;
+        cannonWorldLoaded = true;
+        cannonChunkX = newLocation.getBlockX() >> 4;
+        cannonChunkZ = newLocation.getBlockZ() >> 4;
+        chunkLoaded = newLocation.getWorld().isChunkLoaded(cannonChunkX, cannonChunkZ);
+    }
+
+    public void notifyCannonWorldUnloaded() {
+        cannonWorldLoaded = false;
+        chunkLoaded = false;
+    }
+
+    public void invalidateCachedTargetWorld() {
+        cachedTargetWorld = null;
+    }
+
+    /**
+     * Unified teardown for this instance. Visuals are always removed; other side-effects
+     * depend on the reason (chunk unload vs. world unload vs. reload vs. shutdown).
+     */
+    public void remove(RemovalReason reason) {
+        removeVisuals();
+        switch (reason) {
+            case CHUNK_UNLOAD -> chunkLoaded = false;
+            case WORLD_UNLOAD -> {
+                cannonWorldLoaded = false;
+                chunkLoaded = false;
+            }
+            case REMOVE_COMMAND, DELETE_COMMAND, RELOAD, SHUTDOWN -> {
+                // Instance is being discarded; no further field updates needed.
+            }
+        }
+    }
+
+    public boolean shouldNotify(Player player, long throttleMs) {
+        long now = System.currentTimeMillis();
+        Long last = lastNotifyMs.get(player.getUniqueId());
+        if (last != null && now - last < throttleMs) return false;
+        lastNotifyMs.put(player.getUniqueId(), now);
+        return true;
+    }
+
+    public void clearNotifyThrottle(Player player) {
+        lastNotifyMs.remove(player.getUniqueId());
+    }
+
+    public void clearNotifyThrottle(java.util.UUID playerId) {
+        lastNotifyMs.remove(playerId);
+    }
+
+    /**
+     * A cannon participates in the manager tick loop only when it is enabled, valid,
+     * has a resolvable location, and its world and chunk are both loaded.
+     */
+    public boolean isActive() {
+        return isEnabled()
+                && cannonLocation != null
+                && cannonWorldLoaded
+                && chunkLoaded
+                && searchState != CannonSearchState.INVALID_CONFIGURATION;
     }
 
     public String getDisplayName() {
@@ -53,7 +186,20 @@ public class ConfiguredCannonRTP {
     }
 
     public World getTargetWorld() {
-        return Bukkit.getWorld(configFields.getTargetWorldName());
+        if (cachedTargetWorld != null) {
+            return cachedTargetWorld;
+        }
+        String targetWorldName = configFields.getTargetWorldName();
+        if (targetWorldName == null || targetWorldName.isBlank()) {
+            // Fall back to this cannon's own world when no explicit target is set.
+            cachedTargetWorld = cannonLocation != null ? cannonLocation.getWorld() : null;
+            return cachedTargetWorld;
+        }
+        World resolved = Bukkit.getWorld(targetWorldName);
+        if (resolved != null) {
+            cachedTargetWorld = resolved;
+        }
+        return resolved;
     }
 
     public Location getResolvedSearchCenter() {
@@ -63,6 +209,12 @@ public class ConfiguredCannonRTP {
             return null;
         }
         if (configuredCenter == null) {
+            // No explicit search center — radiate out from this cannon's location if it
+            // is in the target world, otherwise use the target world's spawn.
+            if (cannonLocation != null && cannonLocation.getWorld() != null
+                    && cannonLocation.getWorld().equals(targetWorld)) {
+                return cannonLocation.clone();
+            }
             return targetWorld.getSpawnLocation();
         }
         if (configuredCenter.getWorld() != null && configuredCenter.getWorld().equals(targetWorld)) {
@@ -80,20 +232,11 @@ public class ConfiguredCannonRTP {
     }
 
     public boolean needsMoreLocations() {
-        return queuedLocations.size() < DefaultConfig.getPreloadedLocationsPerCannon();
+        return queuedLocations.size() < LandingSearchConfig.getPreloadedLocationsPerCannon();
     }
 
     public boolean isCharged() {
-        return queuedLocations.size() >= DefaultConfig.getChargedLocationsPerCannon();
-    }
-
-    public boolean isChunkLoaded() {
-        return ChunkLocationChecker.chunkAtLocationIsLoaded(getCannonLocation());
-    }
-
-    public boolean isInChunk(Chunk chunk) {
-        Location cannonLocation = getCannonLocation();
-        return cannonLocation != null && ChunkLocationChecker.locationIsInChunk(cannonLocation, chunk);
+        return queuedLocations.size() >= LandingSearchConfig.getChargedLocationsPerCannon();
     }
 
     public void handleChunkLoad() {
@@ -103,16 +246,55 @@ public class ConfiguredCannonRTP {
     }
 
     public String getCustomModelName() {
-        return configFields.getCustomModel();
+        if (cachedUseCustomModel != null) {
+            return cachedResolvedModelName == null ? "" : cachedResolvedModelName;
+        }
+        resolveModelCache();
+        return cachedResolvedModelName == null ? "" : cachedResolvedModelName;
+    }
+
+    private void resolveModelCache() {
+        String configModel = configFields.getCustomModel();
+        if (configModel != null && !configModel.isBlank()
+                && Bukkit.getPluginManager().isPluginEnabled("FreeMinecraftModels")
+                && ModeledEntityManager.modelExists(configModel)) {
+            cachedResolvedModelName = configModel;
+            cachedUseCustomModel = Boolean.TRUE;
+            return;
+        }
+        String preferred = resolvePreferredModel();
+        if (!preferred.isBlank()) {
+            cachedResolvedModelName = preferred;
+            cachedUseCustomModel = Boolean.TRUE;
+        } else {
+            cachedResolvedModelName = null;
+            cachedUseCustomModel = Boolean.FALSE;
+        }
+    }
+
+    private String resolvePreferredModel() {
+        if (!Bukkit.getPluginManager().isPluginEnabled("FreeMinecraftModels")) {
+            return "";
+        }
+        for (String modelName : DefaultConfig.getCannonModelPriority()) {
+            if (modelName != null && !modelName.isBlank() && ModeledEntityManager.modelExists(modelName)) {
+                return modelName;
+            }
+        }
+        return "";
+    }
+
+    public void invalidateModelCache() {
+        cachedUseCustomModel = null;
+        cachedResolvedModelName = null;
     }
 
     public boolean hasTimedOut() {
-        return (System.currentTimeMillis() - searchStartedAt) / 1000L >= DefaultConfig.getSearchTimeoutSeconds();
+        return searchAttempts >= LandingSearchConfig.getSearchTimeoutAttempts();
     }
 
-    public int getSecondsRemaining() {
-        long elapsed = (System.currentTimeMillis() - searchStartedAt) / 1000L;
-        return Math.max(0, DefaultConfig.getSearchTimeoutSeconds() - (int) elapsed);
+    public int getAttemptsRemaining() {
+        return Math.max(0, LandingSearchConfig.getSearchTimeoutAttempts() - searchAttempts);
     }
 
     public void markReady() {
@@ -153,8 +335,16 @@ public class ConfiguredCannonRTP {
         return location;
     }
 
+    /**
+     * Returns a queued location to the head of the deque. Used when a launch is cancelled
+     * via {@link com.magmaguy.cannonrtp.api.CannonRTPLaunchEvent} so the destination is
+     * reused on the next launch rather than discarded.
+     */
+    public void returnQueuedLocation(Location location) {
+        if (location != null) queuedLocations.offerFirst(location);
+    }
+
     private void restartSearchWindow() {
-        searchStartedAt = System.currentTimeMillis();
         failures.clear();
         searchAttempts = 0;
         if (searchState != CannonSearchState.INVALID_CONFIGURATION) {
@@ -200,8 +390,8 @@ public class ConfiguredCannonRTP {
     }
 
     public void refreshLabel() {
-        Location cannonLocation = getCannonLocation();
-        if (cannonLocation == null || cannonLocation.getWorld() == null) {
+        Location loc = getCannonLocation();
+        if (loc == null || loc.getWorld() == null) {
             removeVisuals();
             return;
         }
@@ -215,14 +405,20 @@ public class ConfiguredCannonRTP {
             staticModel = null;
         }
 
+        boolean freshlySpawned = false;
         if (labelDisplay == null || !labelDisplay.isValid()) {
-            spawnLabel(cannonLocation);
+            spawnLabel(loc);
+            freshlySpawned = true;
         }
         if (labelDisplay == null || !labelDisplay.isValid()) {
             return;
         }
 
-        labelDisplay.teleport(getLabelLocation(cannonLocation));
+        boolean modelPresent = staticModel != null;
+        if (!freshlySpawned && modelPresent != lastLabelHasModel) {
+            labelDisplay.teleport(getLabelLocation(loc));
+        }
+        lastLabelHasModel = modelPresent;
 
         String nextLabelText = buildLabelText();
         if (!nextLabelText.equals(lastLabelText)) {
@@ -241,10 +437,11 @@ public class ConfiguredCannonRTP {
             staticModel = null;
         }
         lastLabelText = "";
+        lastLabelHasModel = false;
     }
 
-    private void spawnLabel(Location cannonLocation) {
-        Location labelLocation = getLabelLocation(cannonLocation);
+    private void spawnLabel(Location loc) {
+        Location labelLocation = getLabelLocation(loc);
         labelDisplay = labelLocation.getWorld().spawn(labelLocation, TextDisplay.class, display -> {
             display.setText(buildLabelText());
             display.setPersistent(false);
@@ -255,38 +452,40 @@ public class ConfiguredCannonRTP {
         lastLabelText = buildLabelText();
     }
 
-    private Location getLabelLocation(Location cannonLocation) {
-        return cannonLocation.clone().add(0, staticModel != null ? 2.0 : 1.2, 0);
+    private Location getLabelLocation(Location loc) {
+        return loc.clone().add(0, staticModel != null ? 2.0 : 1.2, 0);
     }
 
     private String buildLabelText() {
         return ChatColorConverter.convert(getDisplayName() + "\n&7" + getStatusDisplay());
     }
 
+    public boolean hasActiveModel() {
+        return staticModel != null;
+    }
+
     private boolean shouldUseCustomModel() {
-        String modelName = getCustomModelName();
-        return modelName != null
-                && !modelName.isBlank()
-                && Bukkit.getPluginManager().isPluginEnabled("FreeMinecraftModels")
-                && ModeledEntityManager.modelExists(modelName);
+        if (cachedUseCustomModel == null) {
+            resolveModelCache();
+        }
+        return cachedUseCustomModel == Boolean.TRUE;
     }
 
     private void initializeCustomModel() {
-        String modelName = getCustomModelName();
-        Location location = getCannonLocation();
-        if (modelName == null || modelName.isBlank() || location == null || location.getWorld() == null) {
+        if (cachedUseCustomModel == null) {
+            resolveModelCache();
+        }
+        if (cachedUseCustomModel != Boolean.TRUE || cachedResolvedModelName == null) {
             return;
         }
-        if (!Bukkit.getPluginManager().isPluginEnabled("FreeMinecraftModels")) {
-            return;
-        }
-        if (!ModeledEntityManager.modelExists(modelName)) {
+        Location loc = getCannonLocation();
+        if (loc == null || loc.getWorld() == null) {
             return;
         }
         if (staticModel != null) {
             staticModel.remove();
         }
-        staticModel = StaticEntity.create(modelName, location.clone());
+        staticModel = StaticEntity.create(cachedResolvedModelName, loc.clone());
     }
 
     public void playFireAnimation() {
@@ -325,4 +524,3 @@ public class ConfiguredCannonRTP {
         return CannonSearchState.SEARCHING;
     }
 }
-

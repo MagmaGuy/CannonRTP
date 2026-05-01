@@ -2,10 +2,18 @@ package com.magmaguy.cannonrtp;
 
 import com.magmaguy.cannonrtp.commands.CommandHandler;
 import com.magmaguy.cannonrtp.commands.ReloadCommand;
-import com.magmaguy.cannonrtp.config.contentpackages.ContentPackageConfig;
+import com.magmaguy.cannonrtp.config.CannonMessagesConfig;
+import com.magmaguy.cannonrtp.config.CannonSoundsConfig;
 import com.magmaguy.cannonrtp.config.DefaultConfig;
+import com.magmaguy.cannonrtp.config.LandingSearchConfig;
+import com.magmaguy.cannonrtp.config.ProtectionSettingsConfig;
+import com.magmaguy.cannonrtp.config.contentpackages.ContentPackageConfig;
 import com.magmaguy.cannonrtp.content.WorldCannonPackage;
 import com.magmaguy.cannonrtp.content.WorldCannonPackageRefresher;
+import com.magmaguy.cannonrtp.listeners.ChunkLifecycleListener;
+import com.magmaguy.cannonrtp.listeners.FMMIntegrationListener;
+import com.magmaguy.cannonrtp.listeners.PlayerQuitListener;
+import com.magmaguy.cannonrtp.listeners.WorldLifecycleListener;
 import com.magmaguy.cannonrtp.services.CannonRTPManager;
 import com.magmaguy.magmacore.MagmaCore;
 import com.magmaguy.magmacore.initialization.PluginInitializationConfig;
@@ -17,6 +25,7 @@ import com.magmaguy.magmacore.nightbreak.NightbreakPluginBootstrap;
 import com.magmaguy.magmacore.nightbreak.NightbreakPluginHooks;
 import com.magmaguy.magmacore.nightbreak.NightbreakPluginSpec;
 import com.magmaguy.magmacore.util.Logger;
+import com.magmaguy.magmacore.util.VersionChecker;
 import lombok.Getter;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
@@ -58,7 +67,7 @@ public final class CannonRTP extends JavaPlugin {
     @Override
     public void onEnable() {
         NightbreakPluginBootstrap.startInitialization(this,
-                new PluginInitializationConfig("CannonRTP", "cannonrtp.admin", 8),
+                new PluginInitializationConfig("CannonRTP", "cannonrtp.admin", 10),
                 NIGHTBREAK_PLUGIN_SPEC,
                 new NightbreakPluginHooks() {
                     @Override
@@ -113,6 +122,18 @@ public final class CannonRTP extends JavaPlugin {
         initializationContext.step("Default Config");
         new DefaultConfig();
 
+        initializationContext.step("Landing & Search Config");
+        new LandingSearchConfig();
+
+        initializationContext.step("Sounds Config");
+        new CannonSoundsConfig();
+
+        initializationContext.step("Messages Config");
+        new CannonMessagesConfig();
+
+        initializationContext.step("Protection Config");
+        new ProtectionSettingsConfig();
+
         initializationContext.step("Content Importer");
         MagmaCore.initializeImporter(this);
 
@@ -126,8 +147,19 @@ public final class CannonRTP extends JavaPlugin {
         cannonRTPManager.initialize();
 
         initializationContext.step("Event Listeners");
-        getServer().getPluginManager().registerEvents(cannonRTPManager, this);
+        getServer().getPluginManager().registerEvents(new ChunkLifecycleListener(cannonRTPManager), this);
+        getServer().getPluginManager().registerEvents(new WorldLifecycleListener(cannonRTPManager), this);
+        getServer().getPluginManager().registerEvents(new PlayerQuitListener(cannonRTPManager), this);
+        getServer().getPluginManager().registerEvents(new FMMIntegrationListener(cannonRTPManager), this);
         getServer().getPluginManager().registerEvents(new NightbreakFirstTimeSetupWarner(this, FIRST_TIME_SETUP_SPEC, DefaultConfig::isSetupDone), this);
+        getServer().getPluginManager().registerEvents(new VersionChecker.VersionCheckerEvents(), this);
+
+        initializationContext.step("Version Check");
+        String resourceId = DefaultConfig.getSpigotResourceId();
+        if (resourceId != null && !resourceId.isBlank()) {
+            VersionChecker.VersionCheckerEvents.setDownloadURL("https://nightbreak.io/plugin/world_cannon/");
+            VersionChecker.checkPluginVersion(resourceId);
+        }
 
         initializationContext.step("Commands");
         if (getCommand("cannonrtp") != null) {

@@ -1,7 +1,7 @@
 package com.magmaguy.cannonrtp.protection.adapters;
 
 import com.magmaguy.cannonrtp.CannonRTP;
-import com.magmaguy.cannonrtp.config.DefaultConfig;
+import com.magmaguy.cannonrtp.config.ProtectionSettingsConfig;
 import com.magmaguy.cannonrtp.protection.ProtectionAdapter;
 import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
 import me.angeschossen.lands.api.LandsIntegration;
@@ -28,12 +28,12 @@ public class LandsProtectionAdapter implements ProtectionAdapter {
             area = integration.getUnloadedArea(location);
         }
         if (area == null) {
-            return DefaultConfig.isLandsAllowUnclaimedAreas()
+            return ProtectionSettingsConfig.isLandsAllowUnclaimedAreas()
                     ? ProtectionQueryResult.pass()
                     : blocked("an unclaimed Lands area that your config disallows");
         }
 
-        return DefaultConfig.isLandsAllowClaimedAreas()
+        return ProtectionSettingsConfig.isLandsAllowClaimedAreas()
                 ? ProtectionQueryResult.pass()
                 : blocked("a claimed Lands area");
     }

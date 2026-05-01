@@ -1,10 +1,10 @@
 package com.magmaguy.cannonrtp.commands;
 
 import com.magmaguy.cannonrtp.CannonRTP;
-import com.magmaguy.cannonrtp.services.CannonRTPManager;
 import com.magmaguy.cannonrtp.content.WorldCannonPackage;
 import com.magmaguy.cannonrtp.menus.WorldCannonFirstTimeSetupMenu;
 import com.magmaguy.cannonrtp.menus.WorldCannonSetupMenu;
+import com.magmaguy.cannonrtp.services.CannonRTPManager;
 import com.magmaguy.magmacore.command.CommandManager;
 import com.magmaguy.magmacore.nightbreak.NightbreakPluginBootstrap;
 
@@ -14,9 +14,14 @@ public final class CommandHandler {
     private CommandHandler() {
     }
 
+    public static CommandManager getCannonRTPCommandManager() {
+        return cannonRTPCommandManager;
+    }
+
     public static void registerCommands(CannonRTP plugin, CannonRTPManager cannonRTPManager) {
         cannonRTPCommandManager = new CommandManager(plugin, "cannonrtp");
         cannonRTPCommandManager.registerCommand(new CannonRTPRootCommand(cannonRTPManager));
+        cannonRTPCommandManager.registerCommand(new HelpCommand());
         cannonRTPCommandManager.registerCommand(new ReloadCommand(cannonRTPManager));
         NightbreakPluginBootstrap.registerStandardCommands(plugin,
                 cannonRTPCommandManager,
@@ -30,7 +35,8 @@ public final class CommandHandler {
         cannonRTPCommandManager.registerCommand(new ProbeCommand(cannonRTPManager));
         cannonRTPCommandManager.registerCommand(new CreateCommand(cannonRTPManager));
         cannonRTPCommandManager.registerCommand(new CreateNamedCommand(cannonRTPManager));
-        cannonRTPCommandManager.registerCommand(new MoveCommand(cannonRTPManager));
+        cannonRTPCommandManager.registerCommand(new PlaceCommand(cannonRTPManager));
+        cannonRTPCommandManager.registerCommand(new RemoveCommand(cannonRTPManager));
         cannonRTPCommandManager.registerCommand(new DeleteCommand(cannonRTPManager));
         cannonRTPCommandManager.registerCommand(new TargetCommand(cannonRTPManager));
         cannonRTPCommandManager.registerCommand(new CenterCommand(cannonRTPManager));

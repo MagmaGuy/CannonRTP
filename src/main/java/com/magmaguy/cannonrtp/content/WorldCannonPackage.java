@@ -74,11 +74,11 @@ public class WorldCannonPackage extends AbstractNightbreakContentPackage {
     }
 
     private File getInstalledCannonsFolder() {
-        return new File(MetadataHandler.PLUGIN.getDataFolder(), "fun_rtps");
+        return new File(MetadataHandler.PLUGIN.getDataFolder(), "cannons");
     }
 
     private File getDisabledCannonsFolder() {
-        return new File(MetadataHandler.PLUGIN.getDataFolder(), "fun_rtps_disabled");
+        return new File(MetadataHandler.PLUGIN.getDataFolder(), "cannons_disabled");
     }
 
     private List<File> collectManagedEntries(File rootFolder) {

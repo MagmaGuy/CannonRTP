@@ -1,7 +1,6 @@
 package com.magmaguy.cannonrtp.commands;
 
 import com.magmaguy.cannonrtp.config.CannonMessagesConfig;
-import com.magmaguy.cannonrtp.services.CannonRTPManager;
 import com.magmaguy.cannonrtp.util.MessageUtils;
 import com.magmaguy.magmacore.command.AdvancedCommand;
 import com.magmaguy.magmacore.command.CommandData;
@@ -10,16 +9,21 @@ import com.magmaguy.magmacore.command.CommandManager;
 import java.util.List;
 
 /**
- * Fallback for {@code /wc} with no arguments. Prints the greeting followed by every
- * registered CannonRTP subcommand — same content as {@link HelpCommand} so admins
- * discover commands without having to know {@code /wc help} exists.
+ * Prints the greeting line from CannonMessagesConfig followed by every registered
+ * CannonRTP subcommand, pulling usage and description directly from the MagmaCore
+ * command metadata. No hardcoded command list to drift out of sync.
+ *
+ * <p>Reads the CannonRTP-specific {@link CommandManager} from {@link CommandHandler}
+ * — {@code CommandManager.getCommandManagers()} is a shared registry across every
+ * MagmaCore-based plugin on the server, so iterating it directly would leak other
+ * plugins' commands into {@code /wc help}.</p>
  */
-public class CannonRTPRootCommand extends AbstractCannonRTPCommand {
-    public CannonRTPRootCommand(CannonRTPManager cannonRTPManager) {
-        super(cannonRTPManager, List.of());
-        setUsage("/wc");
+public class HelpCommand extends AdvancedCommand {
+    public HelpCommand() {
+        super(List.of("help"));
+        setUsage("/wc help");
         setPermission("cannonrtp.admin");
-        setDescription("Shows CannonRTP help.");
+        setDescription("Lists CannonRTP commands.");
     }
 
     @Override

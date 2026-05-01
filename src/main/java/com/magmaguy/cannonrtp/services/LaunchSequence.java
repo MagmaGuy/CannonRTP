@@ -1,8 +1,12 @@
 package com.magmaguy.cannonrtp.services;
 
-import com.magmaguy.cannonrtp.config.DefaultConfig;
+import com.magmaguy.cannonrtp.api.CannonRTPLandingEvent;
+import com.magmaguy.cannonrtp.config.CannonMessagesConfig;
+import com.magmaguy.cannonrtp.config.CannonSoundsConfig;
+import com.magmaguy.cannonrtp.config.LandingSearchConfig;
 import com.magmaguy.cannonrtp.util.MessageUtils;
 import lombok.Getter;
+import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Particle;
@@ -16,7 +20,6 @@ import java.util.Locale;
 import java.util.Random;
 
 public class LaunchSequence {
-    private static final int SEARCHING_DURATION_TICKS = 66;
     private static final Random random = new Random();
 
     @Getter
@@ -26,6 +29,7 @@ public class LaunchSequence {
     @Getter
     private final Location destination;
     private final Location seatLocation;
+    private final int searchingDurationTicks;
     private final int firingDurationTicks;
     private final double verticalBoostVelocity;
     private final int maxDroppingTicks;
@@ -35,6 +39,7 @@ public class LaunchSequence {
     private int phaseTick = 0;
     @Getter
     private boolean finished = false;
+    private boolean landingEventFired = false;
 
     public LaunchSequence(Player player, ConfiguredCannonRTP cannon, Location destination) {
         this.player = player;
@@ -44,9 +49,10 @@ public class LaunchSequence {
         Location cannonLocation = cannon.getCannonLocation();
         this.seatLocation = cannonLocation != null ? cannonLocation.clone().add(0, 1, 0) : player.getLocation();
 
+        this.searchingDurationTicks = Math.max(1, cannon.getConfigFields().getLaunchWarmupTicks());
         this.firingDurationTicks = Math.max(1, cannon.getConfigFields().getVerticalBoostTicks());
         this.verticalBoostVelocity = cannon.getConfigFields().getVerticalBoostVelocity();
-        this.maxDroppingTicks = DefaultConfig.getSlowFallingSeconds() * 20;
+        this.maxDroppingTicks = LandingSearchConfig.getSlowFallingSeconds() * 20;
     }
 
     /**
@@ -85,7 +91,7 @@ public class LaunchSequence {
         // Randomized coordinate display every tick
         showRandomizedCoordinates();
 
-        if (phaseTick >= SEARCHING_DURATION_TICKS - 1) {
+        if (phaseTick >= searchingDurationTicks - 1) {
             transitionTo(LaunchPhase.FIRING);
         }
     }
@@ -95,20 +101,34 @@ public class LaunchSequence {
         // Apply levitation for the searching duration
         player.addPotionEffect(new PotionEffect(
                 PotionEffectType.LEVITATION,
-                SEARCHING_DURATION_TICKS + 20, // slight buffer so it doesn't expire early
+                searchingDurationTicks + 20, // slight buffer so it doesn't expire early
                 0,
                 true, false, false));
 
-        if (DefaultConfig.getLevitationStartSound() != null) {
+        // When a custom model is rendered, hide the player inside it so the animation reads cleanly.
+        // Falls back to a visible player when no model is active (particle-only visuals).
+        // Uses both the INVISIBILITY potion (hides from other players with ambient particles off)
+        // and the entity invisibility flag via setInvisible(true) (also hides armor, belt-and-suspenders
+        // in case another plugin or source interferes with the potion effect).
+        if (cannon.hasActiveModel()) {
+            player.addPotionEffect(new PotionEffect(
+                    PotionEffectType.INVISIBILITY,
+                    searchingDurationTicks,
+                    0,
+                    true, false, false));
+            player.setInvisible(true);
+        }
+
+        if (CannonSoundsConfig.getLevitationStartSound() != null) {
             player.playSound(player.getLocation(),
-                    DefaultConfig.getLevitationStartSound(),
-                    DefaultConfig.getLevitationStartSoundVolume(),
-                    DefaultConfig.getLevitationStartSoundPitch());
+                    CannonSoundsConfig.getLevitationStartSound(),
+                    CannonSoundsConfig.getLevitationStartSoundVolume(),
+                    CannonSoundsConfig.getLevitationStartSoundPitch());
         }
 
         MessageUtils.sendTitle(player,
-                DefaultConfig.getLaunchQueuedTitle(),
-                DefaultConfig.getLaunchQueuedSubtitle(),
+                CannonMessagesConfig.pickLaunchQueuedTitle(),
+                CannonMessagesConfig.pickLaunchQueuedSubtitle(),
                 "cannon", cannon.getDisplayName());
     }
 
@@ -133,8 +153,8 @@ public class LaunchSequence {
         double y = Math.max(previewWorld.getMinHeight(), 40 + random.nextInt(200));
 
         MessageUtils.sendTitle(player,
-                DefaultConfig.getDestinationPreviewTitle(),
-                DefaultConfig.getDestinationPreviewSubtitle(),
+                CannonMessagesConfig.pickDestinationPreviewTitle(),
+                CannonMessagesConfig.getDestinationPreviewSubtitle(),
                 0, 5, 0,
                 "x", String.format(Locale.US, "%.1f", x),
                 "y", String.format(Locale.US, "%.1f", y),
@@ -158,12 +178,14 @@ public class LaunchSequence {
 
     private void enterFiring() {
         player.removePotionEffect(PotionEffectType.LEVITATION);
+        player.removePotionEffect(PotionEffectType.INVISIBILITY);
+        player.setInvisible(false);
 
-        if (DefaultConfig.getBlastOffSound() != null) {
+        if (CannonSoundsConfig.getBlastOffSound() != null) {
             player.playSound(player.getLocation(),
-                    DefaultConfig.getBlastOffSound(),
-                    DefaultConfig.getBlastOffSoundVolume(),
-                    DefaultConfig.getBlastOffSoundPitch());
+                    CannonSoundsConfig.getBlastOffSound(),
+                    CannonSoundsConfig.getBlastOffSoundVolume(),
+                    CannonSoundsConfig.getBlastOffSoundPitch());
         }
 
         spawnBlastoffExplosion(player.getLocation());
@@ -192,8 +214,8 @@ public class LaunchSequence {
                 0, true, false, false));
 
         MessageUtils.sendTitle(player,
-                getRandomArrivalTitle(),
-                DefaultConfig.getDestinationConfirmedSubtitle(),
+                CannonMessagesConfig.pickArrivalTitle(),
+                CannonMessagesConfig.pickArrivalSubtitle(),
                 0, 60, 20,
                 "x", String.format(Locale.US, "%.1f", destination.getX()),
                 "y", String.format(Locale.US, "%.1f", destination.getY()),
@@ -213,12 +235,23 @@ public class LaunchSequence {
         }
     }
 
-    // --- LANDING: impact burst, cleanup ---
+    // --- LANDING: impact burst, cleanup, fire CannonRTPLandingEvent ---
 
     private void tickLanding() {
         player.removePotionEffect(PotionEffectType.SLOW_FALLING);
         spawnLandingImpact(player.getLocation());
+        fireLandingEvent();
         finished = true;
+    }
+
+    private void fireLandingEvent() {
+        if (landingEventFired) return;
+        landingEventFired = true;
+        Bukkit.getPluginManager().callEvent(new CannonRTPLandingEvent(
+                player,
+                cannon.getConfigId(),
+                cannon.getDisplayName(),
+                destination.clone()));
     }
 
     // --- Helpers ---
@@ -236,6 +269,8 @@ public class LaunchSequence {
         finished = true;
         if (player.isOnline()) {
             player.removePotionEffect(PotionEffectType.LEVITATION);
+            player.removePotionEffect(PotionEffectType.INVISIBILITY);
+            player.setInvisible(false);
             player.removePotionEffect(PotionEffectType.SLOW_FALLING);
             player.setFallDistance(0);
         }
@@ -252,20 +287,12 @@ public class LaunchSequence {
 
     private void sendLaunchConfirmedTitle() {
         MessageUtils.sendTitle(player,
-                DefaultConfig.getDestinationConfirmedTitle(),
-                DefaultConfig.getDestinationConfirmedSubtitle(),
+                CannonMessagesConfig.pickDestinationConfirmedTitle(),
+                CannonMessagesConfig.getDestinationConfirmedSubtitle(),
                 "x", String.format(Locale.US, "%.1f", destination.getX()),
                 "y", String.format(Locale.US, "%.1f", destination.getY()),
                 "z", String.format(Locale.US, "%.1f", destination.getZ()),
                 "world", destination.getWorld() == null ? "unknown" : destination.getWorld().getName());
-    }
-
-    private String getRandomArrivalTitle() {
-        java.util.List<String> titles = DefaultConfig.getArrivalSubtitles();
-        if (titles == null || titles.isEmpty()) {
-            return "<gradient:#ffffff:#cfe8ff>Good luck.</gradient>";
-        }
-        return titles.get(random.nextInt(titles.size()));
     }
 
     private void spawnSmokeTrail(Location location, double yOffset) {

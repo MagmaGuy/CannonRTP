@@ -4,13 +4,14 @@ import com.magmaguy.cannonrtp.config.CannonRTPConfigFields;
 
 import java.util.ArrayList;
 
-public class ExampleCannonRTP extends CannonRTPConfigFields {
-    public ExampleCannonRTP() {
-        super("example_world_cannon",
-                false,
-                "Example World Cannon",
+public class CannonRTPFree extends CannonRTPConfigFields {
+    public CannonRTPFree() {
+        super("cannonrtp_free_cannon",
+                true,
+                "&aFree Cannon",
                 new ArrayList<>(),
                 null,
                 null);
+        this.customModel = "cannonrtp";
     }
 }

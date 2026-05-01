@@ -1,6 +1,6 @@
 package com.magmaguy.cannonrtp.protection.adapters;
 
-import com.magmaguy.cannonrtp.config.DefaultConfig;
+import com.magmaguy.cannonrtp.config.ProtectionSettingsConfig;
 import com.magmaguy.cannonrtp.protection.ProtectionAdapter;
 import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
 import com.palmergames.bukkit.towny.TownyAPI;
@@ -26,18 +26,18 @@ public class TownyProtectionAdapter implements ProtectionAdapter {
         }
 
         if (api.isWilderness(location)) {
-            return DefaultConfig.isTownyAllowWilderness()
+            return ProtectionSettingsConfig.isTownyAllowWilderness()
                     ? ProtectionQueryResult.pass()
                     : blocked("Towny wilderness");
         }
 
         if (api.isNationZone(location)) {
-            return DefaultConfig.isTownyAllowNationZones()
+            return ProtectionSettingsConfig.isTownyAllowNationZones()
                     ? ProtectionQueryResult.pass()
                     : blocked("a Towny nation zone");
         }
 
-        return DefaultConfig.isTownyAllowClaimedTownBlocks()
+        return ProtectionSettingsConfig.isTownyAllowClaimedTownBlocks()
                 ? ProtectionQueryResult.pass()
                 : blocked("a claimed Towny town block");
     }

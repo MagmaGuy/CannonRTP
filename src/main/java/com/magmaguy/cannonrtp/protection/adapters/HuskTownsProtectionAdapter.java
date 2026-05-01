@@ -1,6 +1,6 @@
 package com.magmaguy.cannonrtp.protection.adapters;
 
-import com.magmaguy.cannonrtp.config.DefaultConfig;
+import com.magmaguy.cannonrtp.config.ProtectionSettingsConfig;
 import com.magmaguy.cannonrtp.protection.ProtectionAdapter;
 import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
 import net.william278.husktowns.HuskTowns;
@@ -25,30 +25,30 @@ public class HuskTownsProtectionAdapter implements ProtectionAdapter {
         BukkitHuskTownsAPI api = BukkitHuskTownsAPI.getInstance();
         Optional<TownClaim> townClaim = api.getClaimAt(location);
         if (townClaim.isEmpty()) {
-            return DefaultConfig.isHuskTownsAllowWilderness()
+            return ProtectionSettingsConfig.isHuskTownsAllowWilderness()
                     ? ProtectionQueryResult.pass()
                     : blocked("HuskTowns wilderness");
         }
 
         HuskTowns plugin = (HuskTowns) Bukkit.getPluginManager().getPlugin(PLUGIN_NAME);
         if (plugin != null && townClaim.get().isAdminClaim(plugin)) {
-            return DefaultConfig.isHuskTownsAllowAdminClaims()
+            return ProtectionSettingsConfig.isHuskTownsAllowAdminClaims()
                     ? ProtectionQueryResult.pass()
                     : blocked("a HuskTowns admin claim");
         }
 
         Claim.Type type = townClaim.get().claim().getType();
         if (type == Claim.Type.FARM) {
-            return DefaultConfig.isHuskTownsAllowFarmClaims()
+            return ProtectionSettingsConfig.isHuskTownsAllowFarmClaims()
                     ? ProtectionQueryResult.pass()
                     : blocked("a HuskTowns farm claim");
         }
         if (type == Claim.Type.PLOT) {
-            return DefaultConfig.isHuskTownsAllowPlotClaims()
+            return ProtectionSettingsConfig.isHuskTownsAllowPlotClaims()
                     ? ProtectionQueryResult.pass()
                     : blocked("a HuskTowns plot claim");
         }
-        return DefaultConfig.isHuskTownsAllowRegularClaims()
+        return ProtectionSettingsConfig.isHuskTownsAllowRegularClaims()
                 ? ProtectionQueryResult.pass()
                 : blocked("a HuskTowns town claim");
     }

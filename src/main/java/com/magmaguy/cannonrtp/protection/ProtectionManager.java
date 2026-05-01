@@ -1,6 +1,7 @@
 package com.magmaguy.cannonrtp.protection;
 
-import com.magmaguy.cannonrtp.config.DefaultConfig;
+import com.magmaguy.cannonrtp.config.LandingSearchConfig;
+import com.magmaguy.cannonrtp.config.ProtectionSettingsConfig;
 import com.magmaguy.magmacore.util.Logger;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -16,12 +17,12 @@ public class ProtectionManager {
 
     public static void initialize() {
         activeAdapters.clear();
-        tryRegister("WorldGuard", DefaultConfig.isWorldGuardEnabled(), ADAPTERS_PACKAGE + "WorldGuardProtectionAdapter");
-        tryRegister("Towny", DefaultConfig.isTownyEnabled(), ADAPTERS_PACKAGE + "TownyProtectionAdapter");
-        tryRegister("Lands", DefaultConfig.isLandsEnabled(), ADAPTERS_PACKAGE + "LandsProtectionAdapter");
-        tryRegister("GriefPrevention", DefaultConfig.isGriefPreventionEnabled(), ADAPTERS_PACKAGE + "GriefPreventionProtectionAdapter");
-        tryRegister("HuskTowns", DefaultConfig.isHuskTownsEnabled(), ADAPTERS_PACKAGE + "HuskTownsProtectionAdapter");
-        tryRegister("HuskClaims", DefaultConfig.isHuskClaimsEnabled(), ADAPTERS_PACKAGE + "HuskClaimsProtectionAdapter");
+        tryRegister("WorldGuard", ProtectionSettingsConfig.isWorldGuardEnabled(), ADAPTERS_PACKAGE + "WorldGuardProtectionAdapter");
+        tryRegister("Towny", ProtectionSettingsConfig.isTownyEnabled(), ADAPTERS_PACKAGE + "TownyProtectionAdapter");
+        tryRegister("Lands", ProtectionSettingsConfig.isLandsEnabled(), ADAPTERS_PACKAGE + "LandsProtectionAdapter");
+        tryRegister("GriefPrevention", ProtectionSettingsConfig.isGriefPreventionEnabled(), ADAPTERS_PACKAGE + "GriefPreventionProtectionAdapter");
+        tryRegister("HuskTowns", ProtectionSettingsConfig.isHuskTownsEnabled(), ADAPTERS_PACKAGE + "HuskTownsProtectionAdapter");
+        tryRegister("HuskClaims", ProtectionSettingsConfig.isHuskClaimsEnabled(), ADAPTERS_PACKAGE + "HuskClaimsProtectionAdapter");
     }
 
     private static void tryRegister(String pluginName, boolean configEnabled, String adapterClassName) {
@@ -49,7 +50,7 @@ public class ProtectionManager {
                 }
             } catch (Exception exception) {
                 Logger.warn("Failed to query " + adapter.getPluginName() + " protection at " + location + ": " + exception.getMessage());
-                if (!DefaultConfig.isFailOpenOnProtectionErrors()) {
+                if (!LandingSearchConfig.isFailOpenOnProtectionErrors()) {
                     return ProtectionQueryResult.blocked(adapter.getPluginName(), "its API could not be queried safely");
                 }
             }
