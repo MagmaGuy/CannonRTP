@@ -1,2 +1,22 @@
 # Local design docs and plan notes - not tracked
 docs/
+
+# Build/IDE/runtime artifacts
+.idea/
+.run/
+target/
+*.iml
+*.class
+codex-build.log
+profiles.xml
+
+# Local IDE/tooling and generated debris
+.claude/
+.vscode/
+.classpath
+.project
+.settings/
+.gradle/
+build/
+out/
+dependency-reduced-pom.xml

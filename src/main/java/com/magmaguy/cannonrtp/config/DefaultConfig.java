@@ -2,6 +2,7 @@ package com.magmaguy.cannonrtp.config;
 
 import com.magmaguy.magmacore.config.ConfigurationEngine;
 import com.magmaguy.magmacore.config.ConfigurationFile;
+import com.magmaguy.magmacore.nightbreak.NightbreakPluginUpdater;
 import lombok.Getter;
 
 import java.util.ArrayList;
@@ -18,6 +19,8 @@ public class DefaultConfig extends ConfigurationFile {
     private static List<String> cannonModelPriority;
     @Getter
     private static String spigotResourceId;
+    @Getter
+    private static boolean autoDownloadPluginUpdates;
 
     public DefaultConfig() {
         super("config.yml");
@@ -38,6 +41,7 @@ public class DefaultConfig extends ConfigurationFile {
         setupDone = ConfigurationEngine.setBoolean(
                 List.of("Tracks whether the first-time setup guidance has been completed."),
                 fileConfiguration, "setupDone", false);
+        autoDownloadPluginUpdates = NightbreakPluginUpdater.setAutoDownloadConfigDefault(fileConfiguration);
         language = ConfigurationEngine.setString(
                 List.of("Translation file to load. 'english' uses plugin defaults.",
                         "Release 1 ships English-only; this key exists so future translation packs can target it."),

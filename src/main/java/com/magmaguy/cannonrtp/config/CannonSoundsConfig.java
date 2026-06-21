@@ -58,9 +58,9 @@ public class CannonSoundsConfig extends ConfigurationFile {
 
         String normalizedSound = rawSound.trim().toLowerCase(Locale.ROOT);
 
-        Sound sound = Registry.SOUNDS.get(NamespacedKey.fromString(normalizedSound));
+        Sound sound = getSound(NamespacedKey.fromString(normalizedSound));
         if (sound == null && !normalizedSound.contains(":")) {
-            sound = Registry.SOUNDS.get(NamespacedKey.minecraft(normalizedSound.replace('_', '.')));
+            sound = getSound(minecraftKey(normalizedSound.replace('_', '.')));
         }
         if (sound != null) {
             return sound;
@@ -68,5 +68,17 @@ public class CannonSoundsConfig extends ConfigurationFile {
 
         Logger.warn("CannonRTP config entry " + rawSound + " is not a valid sound for " + key + ".");
         return null;
+    }
+
+    private Sound getSound(NamespacedKey namespacedKey) {
+        return namespacedKey == null ? null : Registry.SOUNDS.get(namespacedKey);
+    }
+
+    private NamespacedKey minecraftKey(String key) {
+        try {
+            return NamespacedKey.minecraft(key);
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
     }
 }

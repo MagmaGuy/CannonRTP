@@ -23,7 +23,7 @@ public class CannonRTPFirstTimeSetupMenu {
                 (JavaPlugin) MetadataHandler.PLUGIN,
                 player,
                 "&6CannonRTP",
-                "&6Nightbreak content setup",
+                "&6Guided content setup",
                 createInfoItem(),
                 List.of(createRecommendedItem(), createManualItem(), createSkipItem()));
     }
@@ -32,7 +32,7 @@ public class CannonRTPFirstTimeSetupMenu {
         return new MenuButton(ItemStackGenerator.generateSkullItemStack(
                 "magmaguy",
                 "&2Welcome to CannonRTP!",
-                List.of("&7Link Nightbreak, install cannon content, and let CannonRTP import it automatically."))) {
+                List.of("&7Connect this server, manage cannon content, and let CannonRTP import it automatically."))) {
             @Override
             public void onClick(Player player) {
                 player.closeInventory();
@@ -45,7 +45,7 @@ public class CannonRTPFirstTimeSetupMenu {
         return new MenuButton(ItemStackGenerator.generateItemStack(
                 Material.GREEN_STAINED_GLASS_PANE,
                 "&2Recommended Setup",
-                List.of("&aMarks setup complete and points you to Nightbreak-managed cannon content."))) {
+                List.of("&aMarks setup complete and points you to cannon content and useful plugins."))) {
             @Override
             public void onClick(Player player) {
                 player.closeInventory();
