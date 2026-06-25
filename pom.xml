@@ -6,7 +6,7 @@
 
     <groupId>com.magmaguy</groupId>
     <artifactId>CannonRTP</artifactId>
-    <version>1.1.0</version>
+    <version>1.1.2</version>
 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
@@ -54,7 +54,7 @@
         <dependency>
             <groupId>org.spigotmc</groupId>
             <artifactId>spigot-api</artifactId>
-            <version>1.21.11-R0.1-SNAPSHOT</version>
+            <version>26.2-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
