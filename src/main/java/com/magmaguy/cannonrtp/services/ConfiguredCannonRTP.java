@@ -1,6 +1,7 @@
 package com.magmaguy.cannonrtp.services;
 
 import com.magmaguy.cannonrtp.config.CannonRTPConfigFields;
+import com.magmaguy.cannonrtp.config.CannonMessagesConfig;
 import com.magmaguy.cannonrtp.config.DefaultConfig;
 import com.magmaguy.cannonrtp.config.LandingSearchConfig;
 import com.magmaguy.freeminecraftmodels.api.ModeledEntityManager;
@@ -380,12 +381,14 @@ public class ConfiguredCannonRTP {
     }
 
     public String getStatusDisplay() {
-        if (!isEnabled()) return "Disabled";
+        if (!isEnabled()) return CannonMessagesConfig.getStatusDisabledLabel();
         return switch (getEffectiveSearchState()) {
-            case READY -> "Ready";
-            case SEARCHING -> queuedLocations.isEmpty() ? "Charging" : "Maintaining";
-            case EXHAUSTED -> "Exhausted";
-            case INVALID_CONFIGURATION -> "Invalid";
+            case READY -> CannonMessagesConfig.getStatusReadyLabel();
+            case SEARCHING -> queuedLocations.isEmpty()
+                    ? CannonMessagesConfig.getStatusChargingLabel()
+                    : CannonMessagesConfig.getStatusMaintainingLabel();
+            case EXHAUSTED -> CannonMessagesConfig.getStatusExhaustedLabel();
+            case INVALID_CONFIGURATION -> CannonMessagesConfig.getStatusInvalidLabel();
         };
     }
 

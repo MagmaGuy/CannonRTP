@@ -1,6 +1,7 @@
 package com.magmaguy.cannonrtp;
 
 import com.magmaguy.cannonrtp.config.CannonRTPConfigFields;
+import com.magmaguy.cannonrtp.config.CannonMessagesConfig;
 import com.magmaguy.cannonrtp.config.LandingSearchConfig;
 import com.magmaguy.cannonrtp.services.CannonSearchState;
 import com.magmaguy.cannonrtp.services.ConfiguredCannonRTP;
@@ -32,10 +33,12 @@ class ConfiguredCannonRTPTest {
         CannonRTPTestSupport.setStaticField(LandingSearchConfig.class, "preloadedLocationsPerCannon", 2);
         CannonRTPTestSupport.setStaticField(LandingSearchConfig.class, "chargedLocationsPerCannon", 1);
         CannonRTPTestSupport.setStaticField(LandingSearchConfig.class, "searchTimeoutAttempts", 10);
+        setStatusLabels("Ready", "Charging", "Maintaining", "Exhausted", "Disabled", "Invalid");
     }
 
     @AfterEach
     void tearDown() {
+        setStatusLabels("Ready", "Charging", "Maintaining", "Exhausted", "Disabled", "Invalid");
         MockBukkit.unmock();
     }
 
@@ -92,6 +95,43 @@ class ConfiguredCannonRTPTest {
     }
 
     @Test
+    void configuredLabelsCoverEveryStatusDisplayBranch() {
+        World world = server.addSimpleWorld("world");
+        world.loadChunk(0, 0);
+        Location cannonLocation = new Location(world, 8, 70, 8);
+        Location firstDestination = new Location(world, 25.5, 66, -31.5);
+        Location secondDestination = new Location(world, -18.5, 72, 40.5);
+        CannonRTPTestSupport.setStaticField(LandingSearchConfig.class, "preloadedLocationsPerCannon", 3);
+        CannonRTPTestSupport.setStaticField(LandingSearchConfig.class, "chargedLocationsPerCannon", 2);
+        setStatusLabels("Listo", "Cargando", "Manteniendo", "Agotado", "Desactivado", "Inválido");
+
+        ConfiguredCannonRTP charging = cannon(
+                "charging", fields("charging", "Charging Cannon", null, null), cannonLocation);
+        assertEquals("Cargando", charging.getStatusDisplay());
+
+        charging.markSearchSuccess(firstDestination);
+        assertEquals("Manteniendo", charging.getStatusDisplay());
+
+        charging.markSearchSuccess(secondDestination);
+        assertEquals("Listo", charging.getStatusDisplay());
+
+        ConfiguredCannonRTP exhausted = cannon(
+                "exhausted", fields("exhausted", "Exhausted Cannon", null, null), cannonLocation);
+        exhausted.exhaustSearch();
+        assertEquals("Agotado", exhausted.getStatusDisplay());
+
+        ConfiguredCannonRTP invalid = cannon(
+                "invalid", fields("invalid", "Invalid Cannon", null, null), cannonLocation);
+        invalid.markInvalidConfiguration("Missing target world.");
+        assertEquals("Inválido", invalid.getStatusDisplay());
+
+        CannonRTPConfigFields disabledFields = new CannonRTPConfigFields(
+                "disabled", false, "Disabled Cannon", List.of(), null, null);
+        ConfiguredCannonRTP disabled = cannon("disabled", disabledFields, cannonLocation);
+        assertEquals("Desactivado", disabled.getStatusDisplay());
+    }
+
+    @Test
     void requiredPermissionControlsUse() {
         World world = server.addSimpleWorld("world");
         world.loadChunk(0, 0);
@@ -118,5 +158,19 @@ class ConfiguredCannonRTPTest {
                 fields,
                 location,
                 ConfigurationLocation.deserialize(location));
+    }
+
+    private static void setStatusLabels(String ready,
+                                        String charging,
+                                        String maintaining,
+                                        String exhausted,
+                                        String disabled,
+                                        String invalid) {
+        CannonRTPTestSupport.setStaticField(CannonMessagesConfig.class, "statusReadyLabel", ready);
+        CannonRTPTestSupport.setStaticField(CannonMessagesConfig.class, "statusChargingLabel", charging);
+        CannonRTPTestSupport.setStaticField(CannonMessagesConfig.class, "statusMaintainingLabel", maintaining);
+        CannonRTPTestSupport.setStaticField(CannonMessagesConfig.class, "statusExhaustedLabel", exhausted);
+        CannonRTPTestSupport.setStaticField(CannonMessagesConfig.class, "statusDisabledLabel", disabled);
+        CannonRTPTestSupport.setStaticField(CannonMessagesConfig.class, "statusInvalidLabel", invalid);
     }
 }

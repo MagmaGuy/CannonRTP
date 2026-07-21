@@ -51,6 +51,18 @@ public class CannonMessagesConfig extends ConfigurationFile {
     private static String destinationPreviewSubtitle;
     @Getter
     private static String destinationConfirmedSubtitle;
+    @Getter
+    private static String statusReadyLabel = "Ready";
+    @Getter
+    private static String statusChargingLabel = "Charging";
+    @Getter
+    private static String statusMaintainingLabel = "Maintaining";
+    @Getter
+    private static String statusExhaustedLabel = "Exhausted";
+    @Getter
+    private static String statusDisabledLabel = "Disabled";
+    @Getter
+    private static String statusInvalidLabel = "Invalid";
 
     private static List<String> launchQueuedTitles = Collections.emptyList();
     private static List<String> launchQueuedSubtitles = Collections.emptyList();
@@ -147,6 +159,25 @@ public class CannonMessagesConfig extends ConfigurationFile {
         unknownCommandMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent when an admin uses an invalid command."),
                 fileConfiguration, "unknownCommand", "$prefix &cUnknown command. Use &f/cannonrtp &cfor help.");
+
+        statusReadyLabel = ConfigurationEngine.setRawString(
+                List.of("Status shown when a cannon is ready to launch."),
+                fileConfiguration, "statusLabels.ready", "Ready");
+        statusChargingLabel = ConfigurationEngine.setRawString(
+                List.of("Status shown while a cannon is finding its first safe destination."),
+                fileConfiguration, "statusLabels.charging", "Charging");
+        statusMaintainingLabel = ConfigurationEngine.setRawString(
+                List.of("Status shown while a cannon is replenishing its destination reserve."),
+                fileConfiguration, "statusLabels.maintaining", "Maintaining");
+        statusExhaustedLabel = ConfigurationEngine.setRawString(
+                List.of("Status shown when a cannon could not find a safe destination."),
+                fileConfiguration, "statusLabels.exhausted", "Exhausted");
+        statusDisabledLabel = ConfigurationEngine.setRawString(
+                List.of("Status shown when a cannon is disabled."),
+                fileConfiguration, "statusLabels.disabled", "Disabled");
+        statusInvalidLabel = ConfigurationEngine.setRawString(
+                List.of("Status shown when a cannon has an invalid configuration."),
+                fileConfiguration, "statusLabels.invalid", "Invalid");
 
         destinationPreviewSubtitle = ConfigurationEngine.setRawString(
                 List.of("Subtitle shown while previewing the chosen destination."),
