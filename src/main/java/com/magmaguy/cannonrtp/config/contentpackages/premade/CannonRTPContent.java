@@ -13,6 +13,6 @@ public class CannonRTPContent extends ContentPackageConfigFields {
                         "&7Includes cannon configs and a free cannon model."),
                 "https://nightbreak.io/plugin/cannonrtp/",
                 "cannonrtp");
-        setNightbreakSlug("cannonrtp");
+        setNightbreakSlug("free-cannon-model");
     }
 }

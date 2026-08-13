@@ -13,6 +13,6 @@ public class CannonRTPPremiumContent extends ContentPackageConfigFields {
                         "&7Includes premium cannon model content. Requires premium supporter access."),
                 "https://nightbreak.io/plugin/cannonrtp_premium/",
                 "cannonrtp_premium");
-        setNightbreakSlug("cannonrtp_premium");
+        setNightbreakSlug("cannonrtp-premium-cannon-model");
     }
 }
