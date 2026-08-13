@@ -11,10 +11,14 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Stream;
 
 public class CannonRTPPackage extends AbstractNightbreakContentPackage {
     @Getter
@@ -152,12 +156,42 @@ public class CannonRTPPackage extends AbstractNightbreakContentPackage {
 
     @Override
     public boolean isInstalled() {
-        return contentPackageConfigFields.isEnabled() && !collectManagedEntries(getInstalledCannonsFolder()).isEmpty();
+        return isDownloaded()
+                && contentPackageConfigFields.isEnabled()
+                && !collectManagedEntries(getInstalledCannonsFolder()).isEmpty();
     }
 
     @Override
     public boolean isDownloaded() {
-        return !collectManagedEntries(getInstalledCannonsFolder()).isEmpty()
-                || !collectManagedEntries(getDisabledCannonsFolder()).isEmpty();
+        // CannonRTP creates the free and premium cannon YAML files itself. Their
+        // presence therefore cannot prove that the separately downloaded model
+        // package was installed. The package import is transactional and writes
+        // both its positive version marker and its model directory, so require
+        // both before suppressing setup/download actions.
+        return getLocalVersion() > 0 && hasInstalledModelFiles();
+    }
+
+    private boolean hasInstalledModelFiles() {
+        File pluginsFolder = MetadataHandler.PLUGIN.getDataFolder().getParentFile();
+        if (pluginsFolder == null) return false;
+
+        File fmmFolder = new File(pluginsFolder, "FreeMinecraftModels");
+        return containsBbmodel(new File(fmmFolder, "models").toPath())
+                || containsBbmodel(new File(fmmFolder, "Models").toPath());
+    }
+
+    private boolean containsBbmodel(Path modelsRoot) {
+        String packageFolderName = contentPackageConfigFields.getFolderName();
+        if (packageFolderName == null || packageFolderName.isBlank()) return false;
+
+        Path packageFolder = modelsRoot.resolve(packageFolderName);
+        if (!Files.isDirectory(packageFolder)) return false;
+        try (Stream<Path> paths = Files.walk(packageFolder)) {
+            return paths.anyMatch(path -> Files.isRegularFile(path)
+                    && path.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".bbmodel"));
+        } catch (IOException exception) {
+            Logger.warn("Failed to inspect the installed model files for " + getDisplayName() + ".");
+            return false;
+        }
     }
 }

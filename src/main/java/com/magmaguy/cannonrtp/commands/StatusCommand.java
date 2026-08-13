@@ -15,7 +15,7 @@ public class StatusCommand extends AbstractCannonRTPCommand {
 
     @Override
     public void execute(CommandData commandData) {
-        cannonRTPManager.sendStatus(commandData.getCommandSender());
+        cannonRTPManager.sendCannonList(commandData.getCommandSender());
     }
 }
 

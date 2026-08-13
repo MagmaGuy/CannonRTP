@@ -14,6 +14,5 @@ public class CannonRTPPremiumContent extends ContentPackageConfigFields {
                 "https://nightbreak.io/plugin/cannonrtp_premium/",
                 "cannonrtp_premium");
         setNightbreakSlug("cannonrtp_premium");
-        setContentFilePrefixes(List.of("cannonrtp_premium"));
     }
 }

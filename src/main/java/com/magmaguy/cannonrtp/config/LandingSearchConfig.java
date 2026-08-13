@@ -6,7 +6,6 @@ import com.magmaguy.magmacore.util.Logger;
 import lombok.Getter;
 import org.bukkit.Material;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -61,27 +60,17 @@ public class LandingSearchConfig extends ConfigurationFile {
                 fileConfiguration, "failOpenOnProtectionErrors", false);
 
         unsafeGroundMaterials = parseMaterials(
-                asStringList(ConfigurationEngine.setList(
+                ConfigLists.asStringList(ConfigurationEngine.setList(
                         List.of("Ground blocks that should never be considered safe to stand on."),
                         fileConfiguration, "unsafeGroundMaterials",
                         List.of("LAVA", "MAGMA_BLOCK", "CAMPFIRE", "SOUL_CAMPFIRE", "CACTUS", "POWDER_SNOW"))),
                 "unsafeGroundMaterials");
         unsafeBodyMaterials = parseMaterials(
-                asStringList(ConfigurationEngine.setList(
+                ConfigLists.asStringList(ConfigurationEngine.setList(
                         List.of("Blocks that should never occupy the feet or head space of a landing location."),
                         fileConfiguration, "unsafeBodyMaterials",
                         List.of("LAVA", "WATER", "FIRE", "SOUL_FIRE", "SWEET_BERRY_BUSH", "POWDER_SNOW", "COBWEB"))),
                 "unsafeBodyMaterials");
-    }
-
-    private List<String> asStringList(List<?> rawList) {
-        List<String> values = new ArrayList<>();
-        for (Object object : rawList) {
-            if (object != null) {
-                values.add(String.valueOf(object));
-            }
-        }
-        return values;
     }
 
     private Set<Material> parseMaterials(List<String> strings, String key) {

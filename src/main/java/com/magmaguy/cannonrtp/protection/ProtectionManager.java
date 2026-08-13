@@ -7,7 +7,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 public class ProtectionManager {
@@ -32,8 +31,14 @@ public class ProtectionManager {
             Class<?> clazz = Class.forName(adapterClassName);
             activeAdapters.add((ProtectionAdapter) clazz.getDeclaredConstructor().newInstance());
             Logger.info("Hooked into " + pluginName + " for landing protection checks.");
-        } catch (NoClassDefFoundError | Exception e) {
+        } catch (LinkageError | Exception e) {
             Logger.warn("Failed to hook into " + pluginName + ": " + e.getMessage());
+            // Keep the failed provider represented in the inspection chain. If
+            // it were simply omitted, adapter linkage failures would always
+            // behave as fail-open regardless of the server's configured policy.
+            activeAdapters.add(new UnavailableProtectionAdapter(
+                    pluginName,
+                    e.getClass().getSimpleName() + ": " + String.valueOf(e.getMessage())));
         }
     }
 
@@ -44,11 +49,13 @@ public class ProtectionManager {
     public static ProtectionQueryResult inspect(Location location) {
         for (ProtectionAdapter adapter : activeAdapters) {
             try {
-                ProtectionQueryResult result = adapter.query(location);
+                ProtectionQueryResult result = ProtectionAdapter.requireProvider(
+                        adapter.query(location),
+                        adapter.getPluginName() + " query result");
                 if (!result.allowed()) {
                     return result;
                 }
-            } catch (Exception exception) {
+            } catch (LinkageError | Exception exception) {
                 Logger.warn("Failed to query " + adapter.getPluginName() + " protection at " + location + ": " + exception.getMessage());
                 if (!LandingSearchConfig.isFailOpenOnProtectionErrors()) {
                     return ProtectionQueryResult.blocked(adapter.getPluginName(), "its API could not be queried safely");
@@ -58,11 +65,23 @@ public class ProtectionManager {
         return ProtectionQueryResult.pass();
     }
 
-    public static List<ProtectionAdapter> getActiveAdapters() {
-        return Collections.unmodifiableList(activeAdapters);
-    }
-
     public static void shutdown() {
         activeAdapters.clear();
+    }
+
+    private record UnavailableProtectionAdapter(
+            String pluginName,
+            String failure) implements ProtectionAdapter {
+        @Override
+        public String getPluginName() {
+            return pluginName;
+        }
+
+        @Override
+        public ProtectionQueryResult query(Location location)
+                throws ProtectionProviderUnavailableException {
+            throw new ProtectionProviderUnavailableException(
+                    pluginName + " adapter failed to initialize (" + failure + ")");
+        }
     }
 }

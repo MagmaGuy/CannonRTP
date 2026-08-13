@@ -1,6 +1,7 @@
 package com.magmaguy.cannonrtp.config.contentpackages;
 
 import com.magmaguy.magmacore.config.CustomConfigFields;
+import com.magmaguy.magmacore.util.Logger;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -51,6 +52,10 @@ public class ContentPackageConfigFields extends CustomConfigFields {
         this.version = processInt("version", version, 0, true);
         this.folderName = processString("folderName", folderName, null, true);
         this.nightbreakSlug = processString("nightbreakSlug", nightbreakSlug, null, false);
-        this.contentFilePrefixes = processStringList("contentFilePrefixes", contentFilePrefixes, List.of(folderName), false);
+        if (folderName == null) {
+            Logger.warn("Content package config " + filename + " is missing folderName; defaulting contentFilePrefixes to an empty list.");
+        }
+        this.contentFilePrefixes = processStringList("contentFilePrefixes", contentFilePrefixes,
+                folderName == null ? List.of() : List.of(folderName), false);
     }
 }

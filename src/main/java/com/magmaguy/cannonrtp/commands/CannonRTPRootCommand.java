@@ -1,11 +1,7 @@
 package com.magmaguy.cannonrtp.commands;
 
-import com.magmaguy.cannonrtp.config.CannonMessagesConfig;
 import com.magmaguy.cannonrtp.services.CannonRTPManager;
-import com.magmaguy.cannonrtp.util.MessageUtils;
-import com.magmaguy.magmacore.command.AdvancedCommand;
 import com.magmaguy.magmacore.command.CommandData;
-import com.magmaguy.magmacore.command.CommandManager;
 
 import java.util.List;
 
@@ -24,16 +20,6 @@ public class CannonRTPRootCommand extends AbstractCannonRTPCommand {
 
     @Override
     public void execute(CommandData commandData) {
-        MessageUtils.sendRaw(commandData.getCommandSender(), CannonMessagesConfig.getHelpHeader());
-        CommandManager commandManager = CommandHandler.getCannonRTPCommandManager();
-        if (commandManager == null) return;
-        for (AdvancedCommand command : commandManager.commands) {
-            if (!command.getPermission().isBlank()
-                    && !commandData.getCommandSender().hasPermission(command.getPermission())) {
-                continue;
-            }
-            commandData.getCommandSender().sendMessage(
-                    "  " + command.getUsage() + " - " + command.getDescription());
-        }
+        HelpCommand.printHelp(commandData.getCommandSender());
     }
 }

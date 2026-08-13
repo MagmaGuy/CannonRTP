@@ -23,10 +23,7 @@ public class ReloadCommand extends AbstractCannonRTPCommand {
     }
 
     public static void reload(CommandSender commandSender) {
-        NightbreakPluginBootstrap.setPendingReloadSender(MetadataHandler.PLUGIN, commandSender);
-        MetadataHandler.PLUGIN.onDisable();
-        MetadataHandler.PLUGIN.onLoad();
-        MetadataHandler.PLUGIN.onEnable();
+        NightbreakPluginBootstrap.reloadPlugin(MetadataHandler.PLUGIN, commandSender);
     }
 }
 

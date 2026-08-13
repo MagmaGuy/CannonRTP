@@ -21,17 +21,23 @@ public class HuskTownsProtectionAdapter implements ProtectionAdapter {
     }
 
     @Override
-    public ProtectionQueryResult query(Location location) {
-        BukkitHuskTownsAPI api = BukkitHuskTownsAPI.getInstance();
-        Optional<TownClaim> townClaim = api.getClaimAt(location);
+    public ProtectionQueryResult query(Location location) throws Exception {
+        BukkitHuskTownsAPI api = ProtectionAdapter.requireProvider(
+                BukkitHuskTownsAPI.getInstance(),
+                "HuskTowns Bukkit API");
+        Optional<TownClaim> townClaim = ProtectionAdapter.requireProvider(
+                api.getClaimAt(location),
+                "HuskTowns claim query");
         if (townClaim.isEmpty()) {
             return ProtectionSettingsConfig.isHuskTownsAllowWilderness()
                     ? ProtectionQueryResult.pass()
                     : blocked("HuskTowns wilderness");
         }
 
-        HuskTowns plugin = (HuskTowns) Bukkit.getPluginManager().getPlugin(PLUGIN_NAME);
-        if (plugin != null && townClaim.get().isAdminClaim(plugin)) {
+        HuskTowns plugin = ProtectionAdapter.requireProvider(
+                (HuskTowns) Bukkit.getPluginManager().getPlugin(PLUGIN_NAME),
+                "HuskTowns plugin instance");
+        if (townClaim.get().isAdminClaim(plugin)) {
             return ProtectionSettingsConfig.isHuskTownsAllowAdminClaims()
                     ? ProtectionQueryResult.pass()
                     : blocked("a HuskTowns admin claim");
@@ -51,10 +57,6 @@ public class HuskTownsProtectionAdapter implements ProtectionAdapter {
         return ProtectionSettingsConfig.isHuskTownsAllowRegularClaims()
                 ? ProtectionQueryResult.pass()
                 : blocked("a HuskTowns town claim");
-    }
-
-    private ProtectionQueryResult blocked(String reason) {
-        return ProtectionQueryResult.blocked(PLUGIN_NAME, reason);
     }
 }
 

@@ -15,12 +15,14 @@ public class TownyProtectionAdapter implements ProtectionAdapter {
     }
 
     @Override
-    public ProtectionQueryResult query(Location location) {
+    public ProtectionQueryResult query(Location location) throws Exception {
         if (location.getWorld() == null) {
             return ProtectionQueryResult.pass();
         }
 
-        TownyAPI api = TownyAPI.getInstance();
+        TownyAPI api = ProtectionAdapter.requireProvider(
+                TownyAPI.getInstance(),
+                "Towny API singleton");
         if (!api.isTownyWorld(location.getWorld())) {
             return ProtectionQueryResult.pass();
         }
@@ -40,10 +42,6 @@ public class TownyProtectionAdapter implements ProtectionAdapter {
         return ProtectionSettingsConfig.isTownyAllowClaimedTownBlocks()
                 ? ProtectionQueryResult.pass()
                 : blocked("a claimed Towny town block");
-    }
-
-    private ProtectionQueryResult blocked(String reason) {
-        return ProtectionQueryResult.blocked(PLUGIN_NAME, reason);
     }
 }
 

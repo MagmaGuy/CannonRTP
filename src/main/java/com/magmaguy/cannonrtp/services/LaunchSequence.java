@@ -1,11 +1,12 @@
 package com.magmaguy.cannonrtp.services;
 
 import com.magmaguy.cannonrtp.api.CannonRTPLandingEvent;
+import com.magmaguy.cannonrtp.api.CannonRTPLocationValidationEvent;
 import com.magmaguy.cannonrtp.config.CannonMessagesConfig;
 import com.magmaguy.cannonrtp.config.CannonSoundsConfig;
 import com.magmaguy.cannonrtp.config.LandingSearchConfig;
+import com.magmaguy.cannonrtp.protection.ProtectionManager;
 import com.magmaguy.cannonrtp.util.MessageUtils;
-import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Location;
@@ -21,12 +22,10 @@ import java.util.Random;
 
 public class LaunchSequence {
     private static final Random random = new Random();
+    private static final int POTION_DURATION_TOLERANCE_TICKS = 2;
 
-    @Getter
     private final Player player;
-    @Getter
     private final ConfiguredCannonRTP cannon;
-    @Getter
     private final Location destination;
     private final Location seatLocation;
     private final int searchingDurationTicks;
@@ -34,12 +33,70 @@ public class LaunchSequence {
     private final double verticalBoostVelocity;
     private final int maxDroppingTicks;
 
-    @Getter
     private LaunchPhase phase = LaunchPhase.SEARCHING;
     private int phaseTick = 0;
-    @Getter
     private boolean finished = false;
-    private boolean landingEventFired = false;
+    /**
+     * Picked from the pool and color-converted once per launch in
+     * {@link #enterSearching()}; the per-tick coordinate display only
+     * re-formats the subtitle.
+     */
+    private String destinationPreviewTitle;
+    /**
+     * Per-launch invariants for the randomized coordinate preview, computed once
+     * in {@link #enterSearching()} and reused by every warmup tick.
+     */
+    private boolean previewAvailable;
+    private double previewAnchorX;
+    private double previewAnchorZ;
+    private int previewMinRadius;
+    private int previewMaxRadius;
+    private int previewMinY;
+    private int elapsedTicks;
+    private OwnedPotionEffect ownedLevitation;
+    private OwnedPotionEffect ownedInvisibility;
+    private OwnedPotionEffect ownedSlowFalling;
+    private boolean ownsEntityInvisibility;
+
+    private static final class OwnedPotionEffect {
+        private final PotionEffect applied;
+        private final PotionEffect previous;
+        private final int appliedAtTick;
+        private final int previousCapturedAtTick;
+        private boolean released;
+
+        private OwnedPotionEffect(PotionEffect applied, PotionEffect previous, int appliedAtTick) {
+            this(applied, previous, appliedAtTick, appliedAtTick);
+        }
+
+        private OwnedPotionEffect(
+                PotionEffect applied,
+                PotionEffect previous,
+                int appliedAtTick,
+                int previousCapturedAtTick) {
+            this.applied = applied;
+            this.previous = previous;
+            this.appliedAtTick = appliedAtTick;
+            this.previousCapturedAtTick = previousCapturedAtTick;
+        }
+
+        private boolean matches(PotionEffect current, int currentTick) {
+            if (current == null || !current.getType().equals(applied.getType())) return false;
+            if (current.getAmplifier() != applied.getAmplifier()
+                    || current.isAmbient() != applied.isAmbient()
+                    || current.hasParticles() != applied.hasParticles()
+                    || current.hasIcon() != applied.hasIcon()) {
+                return false;
+            }
+            if (applied.isInfinite()) return current.isInfinite();
+            if (current.isInfinite()) return false;
+
+            int elapsed = Math.max(0, currentTick - appliedAtTick);
+            int expectedDuration = Math.max(0, applied.getDuration() - elapsed);
+            return Math.abs(current.getDuration() - expectedDuration)
+                    <= POTION_DURATION_TOLERANCE_TICKS;
+        }
+    }
 
     public LaunchSequence(Player player, ConfiguredCannonRTP cannon, Location destination) {
         this.player = player;
@@ -50,7 +107,7 @@ public class LaunchSequence {
         this.seatLocation = cannonLocation != null ? cannonLocation.clone().add(0, 1, 0) : player.getLocation();
 
         this.searchingDurationTicks = Math.max(1, cannon.getConfigFields().getLaunchWarmupTicks());
-        this.firingDurationTicks = Math.max(1, cannon.getConfigFields().getVerticalBoostTicks());
+        this.firingDurationTicks = Math.max(0, cannon.getConfigFields().getVerticalBoostTicks());
         this.verticalBoostVelocity = cannon.getConfigFields().getVerticalBoostVelocity();
         this.maxDroppingTicks = LandingSearchConfig.getSlowFallingSeconds() * 20;
     }
@@ -76,6 +133,7 @@ public class LaunchSequence {
         }
 
         phaseTick++;
+        elapsedTicks++;
         return !finished;
     }
 
@@ -92,14 +150,23 @@ public class LaunchSequence {
         showRandomizedCoordinates();
 
         if (phaseTick >= searchingDurationTicks - 1) {
-            transitionTo(LaunchPhase.FIRING);
+            if (firingDurationTicks == 0) {
+                // Zero explicitly disables the velocity phase, but the launch
+                // still commits with its normal sound/title/effect feedback.
+                enterFiring();
+                transitionTo(LaunchPhase.TELEPORTING);
+            } else {
+                transitionTo(LaunchPhase.FIRING);
+            }
         }
     }
 
     private void enterSearching() {
+        destinationPreviewTitle = MessageUtils.format(CannonMessagesConfig.pickDestinationPreviewTitle());
+        initializeCoordinatePreview();
         cannon.playFireAnimation();
         // Apply levitation for the searching duration
-        player.addPotionEffect(new PotionEffect(
+        ownedLevitation = applyOwnedPotionEffect(new PotionEffect(
                 PotionEffectType.LEVITATION,
                 searchingDurationTicks + 20, // slight buffer so it doesn't expire early
                 0,
@@ -111,12 +178,19 @@ public class LaunchSequence {
         // and the entity invisibility flag via setInvisible(true) (also hides armor, belt-and-suspenders
         // in case another plugin or source interferes with the potion effect).
         if (cannon.hasActiveModel()) {
-            player.addPotionEffect(new PotionEffect(
-                    PotionEffectType.INVISIBILITY,
-                    searchingDurationTicks,
-                    0,
-                    true, false, false));
-            player.setInvisible(true);
+            boolean invisibilityAlreadyOwnedElsewhere = player.isInvisible()
+                    || player.getPotionEffect(PotionEffectType.INVISIBILITY) != null;
+            if (!invisibilityAlreadyOwnedElsewhere) {
+                ownedInvisibility = applyOwnedPotionEffect(new PotionEffect(
+                        PotionEffectType.INVISIBILITY,
+                        searchingDurationTicks,
+                        0,
+                        true, false, false));
+                if (ownedInvisibility != null) {
+                    player.setInvisible(true);
+                    ownsEntityInvisibility = true;
+                }
+            }
         }
 
         if (CannonSoundsConfig.getLevitationStartSound() != null) {
@@ -132,33 +206,41 @@ public class LaunchSequence {
                 "cannon", cannon.getDisplayName());
     }
 
-    private void showRandomizedCoordinates() {
+    private void initializeCoordinatePreview() {
         World targetWorld = cannon.getTargetWorld();
-        Location searchCenter = cannon.getResolvedSearchCenter();
         World previewWorld = targetWorld != null ? targetWorld : destination.getWorld();
-        if (previewWorld == null) return;
+        previewAvailable = previewWorld != null;
+        if (!previewAvailable) return;
 
+        Location searchCenter = cannon.getResolvedSearchCenter();
         Location anchor = searchCenter != null && searchCenter.getWorld() != null
                 ? searchCenter
                 : previewWorld.getSpawnLocation();
+        previewAnchorX = anchor.getX();
+        previewAnchorZ = anchor.getZ();
+        // Config processing already guarantees minSearchRadius >= 0 and
+        // maxSearchRadius >= minSearchRadius + 1.
+        previewMinRadius = cannon.getConfigFields().getMinSearchRadius();
+        previewMaxRadius = cannon.getConfigFields().getMaxSearchRadius();
+        previewMinY = previewWorld.getMinHeight();
+    }
 
-        int maxRadius = Math.max(cannon.getConfigFields().getMinSearchRadius() + 1,
-                cannon.getConfigFields().getMaxSearchRadius());
-        int minRadius = Math.max(0, cannon.getConfigFields().getMinSearchRadius());
+    private void showRandomizedCoordinates() {
+        if (!previewAvailable) return;
 
         double angle = random.nextDouble() * Math.PI * 2;
-        double distance = minRadius + random.nextDouble() * Math.max(1, maxRadius - minRadius);
-        double x = anchor.getX() + Math.cos(angle) * distance;
-        double z = anchor.getZ() + Math.sin(angle) * distance;
-        double y = Math.max(previewWorld.getMinHeight(), 40 + random.nextInt(200));
+        double distance = previewMinRadius + random.nextDouble() * Math.max(1, previewMaxRadius - previewMinRadius);
+        double x = previewAnchorX + Math.cos(angle) * distance;
+        double z = previewAnchorZ + Math.sin(angle) * distance;
+        double y = Math.max(previewMinY, 40 + random.nextInt(200));
 
-        MessageUtils.sendTitle(player,
-                CannonMessagesConfig.pickDestinationPreviewTitle(),
-                CannonMessagesConfig.getDestinationPreviewSubtitle(),
-                0, 5, 0,
-                "x", String.format(Locale.US, "%.1f", x),
-                "y", String.format(Locale.US, "%.1f", y),
-                "z", String.format(Locale.US, "%.1f", z));
+        player.sendTitle(
+                destinationPreviewTitle,
+                MessageUtils.format(CannonMessagesConfig.getDestinationPreviewSubtitle(),
+                        "x", String.format(Locale.US, "%.1f", x),
+                        "y", String.format(Locale.US, "%.1f", y),
+                        "z", String.format(Locale.US, "%.1f", z)),
+                0, 5, 0);
     }
 
     // --- FIRING: vertical boost upward ---
@@ -177,9 +259,9 @@ public class LaunchSequence {
     }
 
     private void enterFiring() {
-        player.removePotionEffect(PotionEffectType.LEVITATION);
-        player.removePotionEffect(PotionEffectType.INVISIBILITY);
-        player.setInvisible(false);
+        releaseOwnedPotionEffect(ownedLevitation);
+        boolean invisibilityReleased = releaseOwnedPotionEffect(ownedInvisibility);
+        releaseEntityInvisibility(invisibilityReleased);
 
         if (CannonSoundsConfig.getBlastOffSound() != null) {
             player.playSound(player.getLocation(),
@@ -196,22 +278,35 @@ public class LaunchSequence {
     // --- TELEPORTING: single tick, teleport + slow falling ---
 
     private void tickTeleporting() {
-        Location airdropLocation = destination.clone().add(0, 50, 0);
-        World world = airdropLocation.getWorld();
-        if (world != null) {
-            double maxArrivalY = world.getMaxHeight() - 1;
-            if (airdropLocation.getY() > maxArrivalY) {
-                airdropLocation.setY(maxArrivalY);
-            }
+        // Revalidate at commit time. A queued destination can become obstructed
+        // or protected after preloading, and clamping an over-height arrival
+        // would place the player inside the roof instead of preserving the
+        // validated geometry.
+        if (!CannonRTPManager.isCurrentWorldReference(destination)
+                || LandingColumnValidator.validate(destination) != LandingColumnValidator.Result.SAFE
+                || !ProtectionManager.inspect(destination).allowed()) {
+            cancelAndRecover();
+            return;
+        }
+        CannonRTPLocationValidationEvent validationEvent =
+                new CannonRTPLocationValidationEvent(
+                        cannon.getConfigId(),
+                        cannon.getDisplayName(),
+                        destination.clone());
+        Bukkit.getPluginManager().callEvent(validationEvent);
+        if (validationEvent.isRejected()) {
+            cancelAndRecover();
+            return;
         }
 
-        player.teleport(airdropLocation);
+        Location airdropLocation = destination.clone().add(0, LandingColumnValidator.AIRDROP_HEIGHT_BLOCKS, 0);
+        if (!player.teleport(airdropLocation)) {
+            cancelAndRecover();
+            return;
+        }
         player.setFallDistance(0);
         player.setVelocity(new Vector());
-        player.addPotionEffect(new PotionEffect(
-                PotionEffectType.SLOW_FALLING,
-                maxDroppingTicks + 20, // buffer
-                0, true, false, false));
+        refreshSlowFallingSafety();
 
         MessageUtils.sendTitle(player,
                 CannonMessagesConfig.pickArrivalTitle(),
@@ -230,23 +325,29 @@ public class LaunchSequence {
     private void tickDropping() {
         spawnSmokeTrail(player.getLocation(), 3);
 
-        if (hasLanded() || phaseTick >= maxDroppingTicks) {
+        if (hasLanded()) {
             transitionTo(LaunchPhase.LANDING);
+            return;
+        }
+
+        if (phaseTick >= maxDroppingTicks) {
+            // A disappearing floor or external teleport must not leave an
+            // immortal active launch that refreshes slow falling forever.
+            // Recover to the cannon without emitting a successful landing.
+            cancelAndRecover();
         }
     }
 
     // --- LANDING: impact burst, cleanup, fire CannonRTPLandingEvent ---
 
     private void tickLanding() {
-        player.removePotionEffect(PotionEffectType.SLOW_FALLING);
+        releaseOwnedPotionEffect(ownedSlowFalling);
         spawnLandingImpact(player.getLocation());
         fireLandingEvent();
         finished = true;
     }
 
     private void fireLandingEvent() {
-        if (landingEventFired) return;
-        landingEventFired = true;
         Bukkit.getPluginManager().callEvent(new CannonRTPLandingEvent(
                 player,
                 cannon.getConfigId(),
@@ -262,27 +363,193 @@ public class LaunchSequence {
     }
 
     /**
-     * Emergency cleanup -- called on disconnect or shutdown.
-     * Removes any effects this sequence applied.
+     * Removes any effects this sequence applied. Called when the player is detected
+     * offline mid-launch and as the final step of cancelAndRecover().
      */
-    public void cleanup() {
+    private void cleanup() {
+        cleanup(false);
+    }
+
+    private void cleanup(boolean retainSlowFallingForSafety) {
         finished = true;
+        releaseOwnedPotionEffect(ownedLevitation);
+        boolean invisibilityReleased = releaseOwnedPotionEffect(ownedInvisibility);
+        releaseEntityInvisibility(invisibilityReleased);
+        if (!retainSlowFallingForSafety) {
+            releaseOwnedPotionEffect(ownedSlowFalling);
+        }
+        player.setFallDistance(0);
+    }
+
+    public boolean targetsWorld(String worldName) {
+        World targetWorld = destination.getWorld();
+        return targetWorld != null && worldName.equals(targetWorld.getName());
+    }
+
+    public void cancelForWorldUnload(String worldName) {
+        cancelAndRecover(worldName);
+    }
+
+    public void cancelAndRecover() {
+        cancelAndRecover(null);
+    }
+
+    public void terminateForQuit() {
+        if (finished) return;
+        cleanup();
+    }
+
+    private void cancelAndRecover(String unavailableWorldName) {
+        if (finished) {
+            return;
+        }
+
+        boolean recovered = false;
         if (player.isOnline()) {
-            player.removePotionEffect(PotionEffectType.LEVITATION);
-            player.removePotionEffect(PotionEffectType.INVISIBILITY);
+            Location recoveryLocation = resolveRecoveryLocation(unavailableWorldName);
+            if (recoveryLocation != null) {
+                recovered = player.teleport(recoveryLocation);
+                if (recovered) {
+                    player.setVelocity(new Vector());
+                    player.setFallDistance(0);
+                }
+            }
+        }
+
+        boolean retainSlowFallingForSafety = !recovered && player.isOnline();
+        if (retainSlowFallingForSafety) {
+            // If no non-unloading world can be resolved, retain safety rather
+            // than stripping slow falling from an airborne player.
+            refreshSlowFallingSafety();
+        }
+        cleanup(retainSlowFallingForSafety);
+    }
+
+    private Location resolveRecoveryLocation(String unavailableWorldName) {
+        Location recoveredSeat = remapToLoadedWorld(seatLocation, unavailableWorldName);
+        if (recoveredSeat != null) {
+            return recoveredSeat;
+        }
+
+        World currentWorld = player.getWorld();
+        if (currentWorld != null && !currentWorld.getName().equals(unavailableWorldName)) {
+            return currentWorld.getSpawnLocation();
+        }
+
+        for (World world : Bukkit.getWorlds()) {
+            if (!world.getName().equals(unavailableWorldName)) {
+                return world.getSpawnLocation();
+            }
+        }
+        return null;
+    }
+
+    private static Location remapToLoadedWorld(Location location, String unavailableWorldName) {
+        if (location == null || location.getWorld() == null) {
+            return null;
+        }
+        String worldName = location.getWorld().getName();
+        if (worldName.equals(unavailableWorldName)) {
+            return null;
+        }
+        World liveWorld = Bukkit.getWorld(worldName);
+        if (liveWorld == null) {
+            return null;
+        }
+        return new Location(
+                liveWorld,
+                location.getX(),
+                location.getY(),
+                location.getZ(),
+                location.getYaw(),
+                location.getPitch());
+    }
+
+    private void refreshSlowFallingSafety() {
+        PotionEffect refreshed = new PotionEffect(
+                PotionEffectType.SLOW_FALLING,
+                maxDroppingTicks + 20,
+                0, true, false, false);
+        if (ownedSlowFalling == null || ownedSlowFalling.released) {
+            ownedSlowFalling = applyOwnedPotionEffect(refreshed);
+            return;
+        }
+
+        PotionEffect current = player.getPotionEffect(PotionEffectType.SLOW_FALLING);
+        // A different live effect belongs to another source and already provides
+        // slow-falling safety. Do not replace it merely because recovery failed.
+        if (current != null && !ownedSlowFalling.matches(current, elapsedTicks)) return;
+        if (current != null && (current.isInfinite()
+                || current.getDuration() >= refreshed.getDuration())) {
+            return;
+        }
+        if (!player.addPotionEffect(refreshed)) return;
+
+        OwnedPotionEffect renewed = new OwnedPotionEffect(
+                refreshed,
+                ownedSlowFalling.previous,
+                elapsedTicks,
+                ownedSlowFalling.previousCapturedAtTick);
+        PotionEffect renewedCurrent = player.getPotionEffect(PotionEffectType.SLOW_FALLING);
+        if (renewed.matches(renewedCurrent, elapsedTicks)) {
+            ownedSlowFalling.released = true;
+            ownedSlowFalling = renewed;
+        }
+    }
+
+    private OwnedPotionEffect applyOwnedPotionEffect(PotionEffect effect) {
+        PotionEffect previous = player.getPotionEffect(effect.getType());
+        if (!player.addPotionEffect(effect)) return null;
+
+        PotionEffect current = player.getPotionEffect(effect.getType());
+        OwnedPotionEffect owned = new OwnedPotionEffect(effect, previous, elapsedTicks);
+        return owned.matches(current, elapsedTicks) ? owned : null;
+    }
+
+    private boolean releaseOwnedPotionEffect(OwnedPotionEffect owned) {
+        if (owned == null || owned.released) return false;
+        owned.released = true;
+
+        PotionEffect current = player.getPotionEffect(owned.applied.getType());
+        // A different effect means another source took ownership while the launch
+        // was active. Leave it untouched instead of restoring stale state over it.
+        if (current != null && !owned.matches(current, elapsedTicks)) return false;
+        if (current != null) {
+            player.removePotionEffect(owned.applied.getType());
+        }
+
+        PotionEffect previous = owned.previous;
+        if (previous == null) return true;
+        int remainingDuration = previous.getDuration();
+        if (!previous.isInfinite()) {
+            remainingDuration -= Math.max(0, elapsedTicks - owned.previousCapturedAtTick);
+            if (remainingDuration <= 0) return true;
+        }
+        player.addPotionEffect(new PotionEffect(
+                previous.getType(),
+                remainingDuration,
+                previous.getAmplifier(),
+                previous.isAmbient(),
+                previous.hasParticles(),
+                previous.hasIcon()));
+        return true;
+    }
+
+    private void releaseEntityInvisibility(boolean ownedEffectReleased) {
+        if (!ownsEntityInvisibility) return;
+        ownsEntityInvisibility = false;
+        if (!ownedEffectReleased) return;
+        // If another source already made the player visible, do not overwrite it.
+        if (player.isInvisible()) {
             player.setInvisible(false);
-            player.removePotionEffect(PotionEffectType.SLOW_FALLING);
-            player.setFallDistance(0);
         }
     }
 
     private boolean hasLanded() {
-        Location location = player.getLocation();
-        org.bukkit.block.Block feetBlock = location.getBlock();
-        org.bukkit.block.Block supportBlock = location.clone().add(0, -0.2, 0).getBlock();
-
-        if (!feetBlock.isPassable()) return true;
-        return !supportBlock.isPassable() && Math.abs(player.getVelocity().getY()) < 0.08;
+        // Player kept a deprecated duplicate of Entity#isOnGround; bind to the
+        // non-deprecated Entity contract while using the same server state.
+        return ((org.bukkit.entity.Entity) player).isOnGround()
+                && Math.abs(player.getVelocity().getY()) < 0.08;
     }
 
     private void sendLaunchConfirmedTitle() {

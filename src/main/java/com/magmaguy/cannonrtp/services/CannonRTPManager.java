@@ -13,7 +13,6 @@ import com.magmaguy.cannonrtp.protection.ProtectionQueryResult;
 import com.magmaguy.cannonrtp.util.MessageUtils;
 import com.magmaguy.magmacore.config.ConfigurationEngine;
 import com.magmaguy.magmacore.util.ConfigurationLocation;
-import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Location;
@@ -27,18 +26,21 @@ import org.bukkit.scheduler.BukkitTask;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
+import java.util.Comparator;
 
 public class CannonRTPManager {
     private static final int SCAN_CADENCE_TICKS = 2;
     private static final long NOTIFY_THROTTLE_MS = 3000L;
-    private static final int GLOBAL_PRELOAD_INTERVAL_TICKS = 1;
+    private static final long NANOS_PER_SECOND = 1_000_000_000L;
 
     private final CannonRTP plugin;
     private final Random random = new Random();
@@ -49,15 +51,31 @@ public class CannonRTPManager {
      */
     private final Map<String, ConfiguredCannonRTP> configuredCannons = new LinkedHashMap<>();
     private final Map<UUID, LaunchSequence> activeLaunches = new HashMap<>();
+    /**
+     * Manager-scoped so reconnecting does not reset a player's cooldown. Entries are
+     * removed on expiry and the whole store is cleared by {@link #shutdown()}.
+     */
+    private final Map<UUID, Long> launchCooldownExpiryNanos = new HashMap<>();
     private final List<ConfiguredCannonRTP> activeCannons = new ArrayList<>();
     private final Map<String, Map<Long, List<ConfiguredCannonRTP>>> cannonsByChunk = new HashMap<>();
 
     private List<String> cachedKnownCannonIds;
     private int preloadRoundRobinIndex = 0;
     private BukkitTask mainTask;
-    @Getter
-    private CannonRTPConfig cannonRTPConfig;
-    private int visualAnimationTick = 0;
+    private long runtimeTick = 0;
+
+    private record PlayerScanEntry(Player player, Location location, int ordinal) {
+    }
+
+    private record WorldPlayerSnapshot(
+            List<PlayerScanEntry> orderedPlayers,
+            Map<Long, List<PlayerScanEntry>> playersByChunk) {
+    }
+
+    private record PlayerScanSnapshot(
+            Map<World, WorldPlayerSnapshot> playersByWorld,
+            Map<UUID, PlayerScanEntry> playersById) {
+    }
 
     public CannonRTPManager(CannonRTP plugin) {
         this.plugin = plugin;
@@ -77,8 +95,10 @@ public class CannonRTPManager {
         cannonsByChunk.clear();
         cachedKnownCannonIds = null;
         preloadRoundRobinIndex = 0;
+        launchCooldownExpiryNanos.clear();
+        runtimeTick = 0;
 
-        cannonRTPConfig = new CannonRTPConfig();
+        new CannonRTPConfig();
         ProtectionManager.initialize();
 
         for (Map.Entry<String, CannonRTPConfigFields> entry : CannonRTPConfig.getCannonRTPs().entrySet()) {
@@ -96,7 +116,7 @@ public class CannonRTPManager {
                 // can wake up via the world-load listener.
                 String instanceId = configId + "#" + i;
                 ConfiguredCannonRTP instance = new ConfiguredCannonRTP(configId, instanceId, fields, resolved, locationString);
-                configuredCannons.put(instanceId, instance);
+                configuredCannons.put(instance.getInstanceId(), instance);
                 indexCannon(instance);
                 refreshActiveState(instance);
             }
@@ -118,6 +138,7 @@ public class CannonRTPManager {
         activeCannons.clear();
         cannonsByChunk.clear();
         cachedKnownCannonIds = null;
+        launchCooldownExpiryNanos.clear();
         ProtectionManager.shutdown();
     }
 
@@ -156,10 +177,6 @@ public class CannonRTPManager {
                     "target", String.valueOf(LandingSearchConfig.getPreloadedLocationsPerCannon()),
                     "reason", instance.getLastStatusDetail());
         }
-    }
-
-    public void sendStatus(CommandSender sender) {
-        sendCannonList(sender);
     }
 
     public void probeLocation(CommandSender sender, Location location) {
@@ -204,7 +221,7 @@ public class CannonRTPManager {
         CannonRTPConfigFields reloadedFields = CannonRTPConfig.getCannonRTPs().get(filename);
         String configPath = reloadedFields != null && reloadedFields.getFile() != null
                 ? reloadedFields.getFile().getAbsolutePath()
-                : "plugins/CannonRTP/custom/cannons/" + filename;
+                : "plugins/CannonRTP/cannons/" + filename;
         MessageUtils.send(player, CannonMessagesConfig.getCreatedCannonMessage(),
                 "cannon", resolvedDisplayName,
                 "id", sanitizedId,
@@ -268,7 +285,8 @@ public class CannonRTPManager {
         }
         fields.removeCannonLocation(nearest.getLocationString());
         ConfigurationEngine.writeValue(fields.getCannonLocations(), fields.getFile(), fields.getFileConfiguration(), "cannonLocations");
-        nearest.remove(RemovalReason.REMOVE_COMMAND);
+        // reload() below already tears down every instance with RemovalReason.RELOAD,
+        // which performs the identical cleanup for the removed placement.
         reload(player);
         MessageUtils.send(player, CannonMessagesConfig.getRemovedCannonMessage(),
                 "cannon", fields.getDisplayName());
@@ -338,13 +356,16 @@ public class CannonRTPManager {
             mainTask = null;
         }
         for (LaunchSequence sequence : activeLaunches.values()) {
-            sequence.cleanup();
+            sequence.cancelAndRecover();
         }
         activeLaunches.clear();
     }
 
     private void tickAll() {
-        visualAnimationTick = (visualAnimationTick + 1) % 7200;
+        runtimeTick++;
+        if (runtimeTick % 20 == 0 && !launchCooldownExpiryNanos.isEmpty()) {
+            pruneExpiredLaunchCooldowns(System.nanoTime());
+        }
 
         Iterator<Map.Entry<UUID, LaunchSequence>> launchIterator = activeLaunches.entrySet().iterator();
         while (launchIterator.hasNext()) {
@@ -355,9 +376,11 @@ public class CannonRTPManager {
             }
         }
 
-        boolean shouldScanPlayers = visualAnimationTick % SCAN_CADENCE_TICKS == 0;
-        int particleCadence = Math.max(1, DefaultConfig.getParticleIntervalTicks() / 5);
-        boolean shouldRenderParticles = visualAnimationTick % particleCadence == 0;
+        boolean shouldScanPlayers = runtimeTick % SCAN_CADENCE_TICKS == 0;
+        boolean shouldRenderParticles = runtimeTick % DefaultConfig.getParticleIntervalTicks() == 0;
+        PlayerScanSnapshot playerSnapshot = shouldScanPlayers || shouldRenderParticles
+                ? snapshotPlayers()
+                : null;
 
         for (ConfiguredCannonRTP instance : activeCannons) {
             Location cannonLocation = instance.getCannonLocation();
@@ -368,18 +391,16 @@ public class CannonRTPManager {
             if (shouldRenderParticles
                     && instance.getConfigFields().isEnableParticles()
                     && !instance.hasActiveModel()
-                    && hasPlayerWithinRange(cannonLocation, 36.0)) {
+                    && hasPlayerWithinRange(cannonLocation, 36.0, playerSnapshot)) {
                 renderParticleAnimation(instance, cannonLocation);
             }
 
             if (shouldScanPlayers) {
-                scanCannonForPlayers(instance);
+                scanCannonForPlayers(instance, playerSnapshot);
             }
         }
 
-        if (visualAnimationTick % GLOBAL_PRELOAD_INTERVAL_TICKS == 0) {
-            runGlobalPreloadAttempt();
-        }
+        runGlobalPreloadAttempt();
     }
 
     private void runGlobalPreloadAttempt() {
@@ -392,23 +413,25 @@ public class CannonRTPManager {
             ConfiguredCannonRTP cannon = activeCannons.get(idx);
 
             CannonSearchState state = cannon.getSearchState();
-            if (state == CannonSearchState.INVALID_CONFIGURATION
-                    || state == CannonSearchState.EXHAUSTED
+            if (state == CannonSearchState.EXHAUSTED
                     || !cannon.needsMoreLocations()) {
                 continue;
             }
 
             World targetWorld = cannon.getTargetWorld();
             if (targetWorld == null) {
-                cannon.markInvalidConfiguration("Target world " + cannon.getConfigFields().getTargetWorldName() + " is not loaded.");
+                // Mark once; re-marking every tick would redundantly purge and
+                // rebuild the same status until the world loads.
+                if (!cannon.isTargetWorldUnavailable()) {
+                    String targetWorldName = cannon.getConfigFields().getTargetWorldName();
+                    cannon.markTargetWorldUnavailable(
+                            targetWorldName == null || targetWorldName.isBlank() ? "unknown" : targetWorldName);
+                }
                 continue;
             }
 
+            // Non-null with a non-null world whenever getTargetWorld() resolved above.
             Location searchCenter = cannon.getResolvedSearchCenter();
-            if (searchCenter == null || searchCenter.getWorld() == null) {
-                cannon.markInvalidConfiguration("Search center is invalid.");
-                continue;
-            }
 
             if (cannon.hasTimedOut()) {
                 cannon.exhaustSearch();
@@ -421,16 +444,34 @@ public class CannonRTPManager {
         }
     }
 
-    private void scanCannonForPlayers(ConfiguredCannonRTP cannon) {
+    private void scanCannonForPlayers(ConfiguredCannonRTP cannon, PlayerScanSnapshot snapshot) {
         Location cannonLocation = cannon.getCannonLocation();
         if (cannonLocation == null || cannonLocation.getWorld() == null) return;
 
         World world = cannonLocation.getWorld();
         double triggerRadius = cannon.getConfigFields().getTriggerRadius();
         double triggerRadiusSq = triggerRadius * triggerRadius;
-        for (Player player : world.getPlayers()) {
-            if (player.getLocation().distanceSquared(cannonLocation) > triggerRadiusSq) continue;
-            if (activeLaunches.containsKey(player.getUniqueId())) continue;
+        List<PlayerScanEntry> nearbyPlayers = playersInChunkRange(snapshot, cannonLocation, triggerRadius);
+        Set<UUID> visitedPlayers = new HashSet<>();
+        // Only tracked when backoffs exist: entries recorded mid-scan belong to players
+        // inside the trigger, so skipping the retain pass for them changes nothing.
+        Set<UUID> playersInsideTrigger = cannon.hasLaunchCancellationBackoffs() ? new HashSet<>() : null;
+        for (PlayerScanEntry playerEntry : nearbyPlayers) {
+            Player player = playerEntry.player();
+            UUID playerId = player.getUniqueId();
+            visitedPlayers.add(playerId);
+            if (playerEntry.location().distanceSquared(cannonLocation) > triggerRadiusSq) {
+                // Keep the latch for the whole launch, including the airdrop.
+                // Once the launch has ended, a real exit permits the next entry.
+                cannon.observeLaunchTriggerPosition(
+                        playerId,
+                        false,
+                        activeLaunches.containsKey(playerId));
+                continue;
+            }
+            if (playersInsideTrigger != null) playersInsideTrigger.add(player.getUniqueId());
+            if (activeLaunches.containsKey(playerId)) continue;
+            if (cannon.isLaunchTriggerLatched(playerId)) continue;
             if (!player.hasPermission("cannonrtp.use")) continue;
 
             if (!cannon.canUse(player)) {
@@ -441,11 +482,19 @@ public class CannonRTPManager {
                 continue;
             }
 
-            if (cannon.getSearchState() == CannonSearchState.INVALID_CONFIGURATION) {
+            long nowNanos = System.nanoTime();
+            if (cannon.isLaunchCancellationBackoffActive(player.getUniqueId(), nowNanos)) {
+                continue;
+            }
+
+            // This gate deliberately precedes every queue read/consume and launch effect.
+            long remainingCooldownSeconds = getRemainingLaunchCooldownSeconds(player.getUniqueId());
+            if (remainingCooldownSeconds > 0) {
                 if (cannon.shouldNotify(player, NOTIFY_THROTTLE_MS)) {
-                    MessageUtils.send(player, CannonMessagesConfig.getInvalidConfigurationMessage(),
+                    MessageUtils.send(player, CannonMessagesConfig.getLaunchCooldownMessage(),
                             "cannon", cannon.getDisplayName(),
-                            "reason", cannon.getLastStatusDetail());
+                            "seconds", String.valueOf(remainingCooldownSeconds),
+                            "unit", remainingCooldownSeconds == 1 ? "second" : "seconds");
                 }
                 continue;
             }
@@ -475,6 +524,9 @@ public class CannonRTPManager {
                 }
                 continue;
             }
+            if (!isCurrentWorldReference(destination)) {
+                continue;
+            }
 
             // Fire the cancellable launch event. If anyone vetoes it, return the
             // destination to the queue and skip this player — the cannon resumes
@@ -488,13 +540,70 @@ public class CannonRTPManager {
             Bukkit.getPluginManager().callEvent(launchEvent);
             if (launchEvent.isCancelled()) {
                 cannon.returnQueuedLocation(destination);
+                cannon.recordLaunchCancellation(player.getUniqueId(), nowNanos);
                 continue;
             }
 
             cannon.clearNotifyThrottle(player);
+            cannon.clearLaunchCancellationBackoff(player.getUniqueId());
             LaunchSequence sequence = new LaunchSequence(player, cannon, destination);
-            activeLaunches.put(player.getUniqueId(), sequence);
+            activeLaunches.put(playerId, sequence);
+            cannon.latchLaunchTrigger(playerId);
+            // A cancelled event returned the destination above; only an accepted,
+            // registered launch reaches this point and starts the cooldown.
+            startLaunchCooldown(player.getUniqueId());
         }
+
+        // A chunk-local candidate scan cannot see a latched player who moved far
+        // away. Visit those exceptional pairs explicitly so a genuine exit still
+        // releases the latch once its launch has ended.
+        for (UUID playerId : cannon.getLatchedLaunchTriggerPlayers()) {
+            if (visitedPlayers.contains(playerId)) continue;
+            PlayerScanEntry playerEntry = snapshot.playersById().get(playerId);
+            boolean insideTrigger = playerEntry != null
+                    && playerEntry.location().getWorld() == world
+                    && playerEntry.location().distanceSquared(cannonLocation) <= triggerRadiusSq;
+            if (insideTrigger && playersInsideTrigger != null) playersInsideTrigger.add(playerId);
+            cannon.observeLaunchTriggerPosition(
+                    playerId,
+                    insideTrigger,
+                    activeLaunches.containsKey(playerId));
+        }
+        if (playersInsideTrigger != null) {
+            cannon.retainLaunchCancellationBackoffs(playersInsideTrigger);
+        }
+    }
+
+    static boolean isCurrentWorldReference(Location location) {
+        World locationWorld = location.getWorld();
+        return locationWorld != null && Bukkit.getWorld(locationWorld.getName()) == locationWorld;
+    }
+
+    private void startLaunchCooldown(UUID playerId) {
+        int cooldownSeconds = DefaultConfig.getLaunchCooldownSeconds();
+        if (cooldownSeconds <= 0) {
+            launchCooldownExpiryNanos.remove(playerId);
+            return;
+        }
+        launchCooldownExpiryNanos.put(
+                playerId,
+                System.nanoTime() + cooldownSeconds * NANOS_PER_SECOND);
+    }
+
+    private long getRemainingLaunchCooldownSeconds(UUID playerId) {
+        Long expiryNanos = launchCooldownExpiryNanos.get(playerId);
+        if (expiryNanos == null) return 0;
+
+        long remainingNanos = expiryNanos - System.nanoTime();
+        if (remainingNanos <= 0) {
+            launchCooldownExpiryNanos.remove(playerId);
+            return 0;
+        }
+        return (remainingNanos + NANOS_PER_SECOND - 1) / NANOS_PER_SECOND;
+    }
+
+    private void pruneExpiredLaunchCooldowns(long nowNanos) {
+        launchCooldownExpiryNanos.entrySet().removeIf(entry -> entry.getValue() - nowNanos <= 0);
     }
 
     private void attemptPreload(ConfiguredCannonRTP cannon, World targetWorld, Location searchCenter) {
@@ -508,55 +617,91 @@ public class CannonRTPManager {
 
         int chunkX = candidateLocation.getBlockX() >> 4;
         int chunkZ = candidateLocation.getBlockZ() >> 4;
-        if (!targetWorld.isChunkLoaded(chunkX, chunkZ)
-                && !targetWorld.loadChunk(chunkX, chunkZ, false)) {
+        boolean chunkWasAlreadyLoaded = targetWorld.isChunkLoaded(chunkX, chunkZ);
+        if (!chunkWasAlreadyLoaded && !targetWorld.loadChunk(chunkX, chunkZ, false)) {
             cannon.markSearchFailure(SearchFailureReason.NO_SAFE_SURFACE);
             return;
         }
+        try {
+            Block highestBlock = targetWorld.getHighestBlockAt(candidateLocation);
+            if (highestBlock.getType().isAir()) {
+                cannon.markSearchFailure(SearchFailureReason.NO_SAFE_SURFACE);
+                return;
+            }
 
-        Block highestBlock = targetWorld.getHighestBlockAt(candidateLocation);
-        if (highestBlock == null || highestBlock.getType().isAir()) {
-            cannon.markSearchFailure(SearchFailureReason.NO_SAFE_SURFACE);
-            return;
-        }
+            Location landingLocation = highestBlock.getLocation().add(0.5, 1, 0.5);
+            LandingColumnValidator.Result physicalResult = LandingColumnValidator.validate(landingLocation);
+            if (physicalResult != LandingColumnValidator.Result.SAFE
+                    && targetWorld.getEnvironment() == World.Environment.NETHER) {
+                Location belowRoof = findSafeNetherLanding(
+                        targetWorld,
+                        candidateLocation.getBlockX(),
+                        candidateLocation.getBlockZ(),
+                        highestBlock.getY());
+                if (belowRoof != null) {
+                    landingLocation = belowRoof;
+                    physicalResult = LandingColumnValidator.Result.SAFE;
+                }
+            }
+            if (physicalResult != LandingColumnValidator.Result.SAFE) {
+                cannon.markSearchFailure(physicalResult == LandingColumnValidator.Result.HAZARDOUS_TERRAIN
+                        ? SearchFailureReason.HAZARDOUS_TERRAIN
+                        : SearchFailureReason.NO_SAFE_SURFACE);
+                return;
+            }
 
-        Location landingLocation = highestBlock.getLocation().add(0.5, 1, 0.5);
-        Block feetBlock = landingLocation.getBlock();
-        Block headBlock = landingLocation.clone().add(0, 1, 0).getBlock();
-        if (!feetBlock.isPassable() || !headBlock.isPassable()) {
-            cannon.markSearchFailure(SearchFailureReason.NO_SAFE_SURFACE);
-            return;
-        }
-        if (!highestBlock.getType().isSolid() || highestBlock.isLiquid()) {
-            cannon.markSearchFailure(SearchFailureReason.NO_SAFE_SURFACE);
-            return;
-        }
-        if (LandingSearchConfig.isUnsafeGroundMaterial(highestBlock.getType()) ||
-                LandingSearchConfig.isUnsafeBodyMaterial(feetBlock.getType()) ||
-                LandingSearchConfig.isUnsafeBodyMaterial(headBlock.getType())) {
-            cannon.markSearchFailure(SearchFailureReason.HAZARDOUS_TERRAIN);
-            return;
-        }
+            ProtectionQueryResult protectionQueryResult = ProtectionManager.inspect(landingLocation);
+            if (!protectionQueryResult.allowed()) {
+                cannon.markSearchFailure(SearchFailureReason.PROTECTED_LAND);
+                return;
+            }
 
-        ProtectionQueryResult protectionQueryResult = ProtectionManager.inspect(landingLocation);
-        if (!protectionQueryResult.allowed()) {
-            cannon.markSearchFailure(SearchFailureReason.PROTECTED_LAND);
-            return;
-        }
+            // External listeners may veto a candidate after all built-in checks pass.
+            CannonRTPLocationValidationEvent validationEvent = new CannonRTPLocationValidationEvent(
+                    cannon.getConfigId(), cannon.getDisplayName(), landingLocation.clone());
+            Bukkit.getPluginManager().callEvent(validationEvent);
+            if (validationEvent.isRejected()) {
+                cannon.markSearchFailure(SearchFailureReason.API_REJECTED, validationEvent.getRejectionReason());
+                return;
+            }
 
-        // External listeners may veto a candidate after all built-in checks pass.
-        CannonRTPLocationValidationEvent validationEvent = new CannonRTPLocationValidationEvent(
-                cannon.getConfigId(), cannon.getDisplayName(), landingLocation.clone());
-        Bukkit.getPluginManager().callEvent(validationEvent);
-        if (validationEvent.isRejected()) {
-            cannon.markSearchFailure(SearchFailureReason.PROTECTED_LAND);
-            return;
+            cannon.markSearchSuccess(landingLocation);
+        } finally {
+            if (!chunkWasAlreadyLoaded) targetWorld.unloadChunkRequest(chunkX, chunkZ);
         }
+    }
 
-        cannon.markSearchSuccess(landingLocation);
-        if (!cannon.needsMoreLocations()) {
-            cannon.markReady();
+    /**
+     * The Nether heightmap normally resolves to the bedrock roof. Once that
+     * surface is rejected, walk downward and consider actual cavern floors whose
+     * complete airdrop column is clear instead of exhausting every Nether search
+     * at the roof.
+     */
+    private Location findSafeNetherLanding(
+            World world,
+            int blockX,
+            int blockZ,
+            int highestGroundY) {
+        int maximumGroundY = Math.min(highestGroundY - 1, world.getLogicalHeight() - 9);
+        for (int groundY = maximumGroundY; groundY >= world.getMinHeight(); groundY--) {
+            Block ground = world.getBlockAt(blockX, groundY, blockZ);
+            if (!ground.getType().isSolid() || ground.isLiquid()) continue;
+
+            // Most descending samples are inside solid terrain. Only run the
+            // full 52-block column validation at an exposed candidate surface.
+            Block feet = world.getBlockAt(blockX, groundY + 1, blockZ);
+            Block head = world.getBlockAt(blockX, groundY + 2, blockZ);
+            if (!(feet.getType().isAir() || feet.isPassable())
+                    || !(head.getType().isAir() || head.isPassable())) {
+                continue;
+            }
+
+            Location candidate = new Location(world, blockX + 0.5, groundY + 1, blockZ + 0.5);
+            if (LandingColumnValidator.validate(candidate) == LandingColumnValidator.Result.SAFE) {
+                return candidate;
+            }
         }
+        return null;
     }
 
     private Location randomizeLocation(World world, Location center, int minRadius, int maxRadius) {
@@ -574,22 +719,22 @@ public class CannonRTPManager {
         Location center = cannonLocation.clone().add(0, 1.0, 0);
         Color primaryColor = cannon.getPrimaryVisualColor();
         Color accentColor = cannon.getAccentVisualColor();
-        double rotation = visualAnimationTick * 0.06;
-        double orbitRadius = 0.78 + Math.sin(visualAnimationTick * 0.04) * 0.05;
+        double rotation = (runtimeTick % 7200) * 0.06;
+        double orbitRadius = 0.78 + Math.sin((runtimeTick % 7200) * 0.04) * 0.05;
 
-        spawnOrbitTrack(world, center, rotation, orbitRadius, 0.22, 0.30, primaryColor, accentColor, 1.0f, true);
-        spawnOrbitTrack(world, center, rotation + Math.PI, orbitRadius, 0.22, -0.30, accentColor, primaryColor, 1.0f, true);
+        spawnOrbitTrack(world, center, rotation, orbitRadius, 0.22, 0.30, primaryColor, accentColor);
+        spawnOrbitTrack(world, center, rotation + Math.PI, orbitRadius, 0.22, -0.30, accentColor, primaryColor);
 
         world.spawnParticle(
                 Particle.DUST_COLOR_TRANSITION,
-                center.clone().add(0, 0.18 + Math.sin(visualAnimationTick * 0.04) * 0.05, 0),
+                center.clone().add(0, 0.18 + Math.sin((runtimeTick % 7200) * 0.04) * 0.05, 0),
                 1, 0, 0, 0, 0,
                 new Particle.DustTransition(primaryColor, accentColor, 0.95f));
     }
 
     private void spawnOrbitTrack(World world, Location center, double angle, double radius, double baseHeight, double verticalWaveDirection,
-                                 Color fromColor, Color toColor, float size, boolean spawnFireworkTrail) {
-        double verticalWave = Math.sin(angle * 2.0 + visualAnimationTick * 0.02) * 0.20 * verticalWaveDirection;
+                                 Color fromColor, Color toColor) {
+        double verticalWave = Math.sin(angle * 2.0 + (runtimeTick % 7200) * 0.02) * 0.20 * verticalWaveDirection;
         Location particleLocation = center.clone().add(
                 Math.cos(angle) * radius,
                 baseHeight + verticalWave,
@@ -598,20 +743,66 @@ public class CannonRTPManager {
                 Particle.DUST_COLOR_TRANSITION,
                 particleLocation,
                 1, 0, 0, 0, 0,
-                new Particle.DustTransition(fromColor, toColor, size));
+                new Particle.DustTransition(fromColor, toColor, 1.0f));
 
-        if (!spawnFireworkTrail) return;
         world.spawnParticle(Particle.FIREWORK, particleLocation, 1, 0.015, 0.015, 0.015, 0.0);
     }
 
-    private boolean hasPlayerWithinRange(Location location, double radius) {
+    private boolean hasPlayerWithinRange(Location location, double radius, PlayerScanSnapshot snapshot) {
         World world = location.getWorld();
-        if (world == null) return false;
+        if (world == null || snapshot == null) return false;
         double radiusSq = radius * radius;
-        for (Player player : world.getPlayers()) {
-            if (player.getLocation().distanceSquared(location) <= radiusSq) return true;
+        for (PlayerScanEntry player : playersInChunkRange(snapshot, location, radius)) {
+            if (player.location().distanceSquared(location) <= radiusSq) return true;
         }
         return false;
+    }
+
+    private PlayerScanSnapshot snapshotPlayers() {
+        Map<World, WorldPlayerSnapshot> playersByWorld = new HashMap<>();
+        Map<UUID, PlayerScanEntry> playersById = new HashMap<>();
+
+        for (World world : Bukkit.getWorlds()) {
+            List<PlayerScanEntry> orderedPlayers = new ArrayList<>();
+            Map<Long, List<PlayerScanEntry>> playersByChunk = new HashMap<>();
+            int ordinal = 0;
+            for (Player player : world.getPlayers()) {
+                Location location = player.getLocation();
+                PlayerScanEntry entry = new PlayerScanEntry(player, location, ordinal++);
+                orderedPlayers.add(entry);
+                playersById.put(player.getUniqueId(), entry);
+                playersByChunk
+                        .computeIfAbsent(packChunkKey(location.getBlockX() >> 4, location.getBlockZ() >> 4),
+                                ignored -> new ArrayList<>())
+                        .add(entry);
+            }
+            playersByWorld.put(world, new WorldPlayerSnapshot(orderedPlayers, playersByChunk));
+        }
+        return new PlayerScanSnapshot(playersByWorld, playersById);
+    }
+
+    private List<PlayerScanEntry> playersInChunkRange(
+            PlayerScanSnapshot snapshot,
+            Location center,
+            double radius) {
+        if (snapshot == null || center.getWorld() == null) return List.of();
+        WorldPlayerSnapshot worldPlayers = snapshot.playersByWorld().get(center.getWorld());
+        if (worldPlayers == null || worldPlayers.orderedPlayers().isEmpty()) return List.of();
+
+        int minChunkX = ((int) Math.floor(center.getX() - radius)) >> 4;
+        int maxChunkX = ((int) Math.floor(center.getX() + radius)) >> 4;
+        int minChunkZ = ((int) Math.floor(center.getZ() - radius)) >> 4;
+        int maxChunkZ = ((int) Math.floor(center.getZ() + radius)) >> 4;
+        List<PlayerScanEntry> candidates = new ArrayList<>();
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                List<PlayerScanEntry> chunkPlayers = worldPlayers.playersByChunk()
+                        .get(packChunkKey(chunkX, chunkZ));
+                if (chunkPlayers != null) candidates.addAll(chunkPlayers);
+            }
+        }
+        candidates.sort(Comparator.comparingInt(PlayerScanEntry::ordinal));
+        return candidates;
     }
 
     private String sanitizeId(String id) {
@@ -657,35 +848,59 @@ public class CannonRTPManager {
                 indexCannon(cannon);
                 refreshActiveState(cannon);
             }
-            if (worldName.equals(cannon.getConfigFields().getTargetWorldName())) {
-                cannon.invalidateCachedTargetWorld();
+            if (worldName.equals(cannon.getEffectiveTargetWorldName())) {
+                cannon.notifyTargetWorldLoaded();
             }
         }
     }
 
     public void handleWorldUnload(String worldName) {
+        Iterator<Map.Entry<UUID, LaunchSequence>> launches = activeLaunches.entrySet().iterator();
+        while (launches.hasNext()) {
+            LaunchSequence sequence = launches.next().getValue();
+            if (sequence.targetsWorld(worldName)) {
+                sequence.cancelForWorldUnload(worldName);
+                launches.remove();
+            }
+        }
+
         for (ConfiguredCannonRTP cannon : configuredCannons.values()) {
+            boolean targetWorldMatch = worldName.equals(cannon.getEffectiveTargetWorldName());
+            int purgedDestinations = cannon.purgeQueuedLocationsForWorld(worldName);
+
             if (worldName.equals(cannon.getCannonWorldName())) {
                 cannon.remove(RemovalReason.WORLD_UNLOAD);
                 cannon.notifyCannonWorldUnloaded();
                 refreshActiveState(cannon);
             }
-            if (worldName.equals(cannon.getConfigFields().getTargetWorldName())) {
-                cannon.invalidateCachedTargetWorld();
+            if (targetWorldMatch || purgedDestinations > 0) {
+                cannon.markTargetWorldUnavailable(worldName);
             }
         }
         cannonsByChunk.remove(worldName);
     }
 
     public void handlePlayerQuit(UUID playerId) {
+        LaunchSequence activeLaunch = activeLaunches.remove(playerId);
+        if (activeLaunch != null) {
+            activeLaunch.terminateForQuit();
+        }
         for (ConfiguredCannonRTP cannon : configuredCannons.values()) {
             cannon.clearNotifyThrottle(playerId);
+            cannon.clearLaunchCancellationBackoff(playerId);
+            cannon.releaseLaunchTrigger(playerId);
         }
     }
 
     public void handleFMMStateChange() {
         for (ConfiguredCannonRTP cannon : configuredCannons.values()) {
-            cannon.invalidateModelCache();
+            cannon.resetModelAfterFmmReload();
+        }
+    }
+
+    public void handleFMMReloaded() {
+        for (ConfiguredCannonRTP cannon : configuredCannons.values()) {
+            cannon.resetModelAfterFmmReload();
         }
     }
 

@@ -30,6 +30,8 @@ public class CannonMessagesConfig extends ConfigurationFile {
     @Getter
     private static String noPermissionMessage;
     @Getter
+    private static String launchCooldownMessage;
+    @Getter
     private static String cannonDisabledMessage;
     @Getter
     private static String queueCalibrationMessage;
@@ -132,6 +134,10 @@ public class CannonMessagesConfig extends ConfigurationFile {
         noPermissionMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent when a player can see a cannon but cannot use it."),
                 fileConfiguration, "noPermission", "$prefix &cYou do not have permission to use &f$cannon&c.");
+        launchCooldownMessage = ConfigurationEngine.setRawString(
+                List.of("Message sent when a player enters a cannon before their launch cooldown expires.",
+                        "$seconds is the rounded-up remaining cooldown time; $unit is second or seconds."),
+                fileConfiguration, "launchCooldown", "$prefix &eYour cannon is recharging. Try again in &f$seconds $unit&e.");
         cannonDisabledMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent when a player steps into a disabled or invalid cannon."),
                 fileConfiguration, "cannonDisabled", "$prefix &cCannon &f$cannon &cis disabled or not ready yet.");
@@ -186,35 +192,35 @@ public class CannonMessagesConfig extends ConfigurationFile {
                 List.of("Subtitle shown right before teleporting."),
                 fileConfiguration, "titles.destinationConfirmedSubtitle", "<gradient:#d7fff1:#92f7c6>$x</gradient> &8| <gradient:#d7fff1:#92f7c6>$y</gradient> &8| <gradient:#d7fff1:#92f7c6>$z</gradient> &8in <gradient:#ffffff:#bfe7ff>$world</gradient>");
 
-        launchQueuedTitles = Collections.unmodifiableList(asStringList(ConfigurationEngine.setList(
+        launchQueuedTitles = Collections.unmodifiableList(ConfigLists.asStringList(ConfigurationEngine.setList(
                 List.of("Title pool shown when a launch starts. CannonRTP picks one at random each launch."),
                 fileConfiguration, "titles.launchQueuedTitles", List.of(
                         "<gradient:#ff8a3d:#ffd166>Launching</gradient>",
                         "<gradient:#ff8a3d:#ffd166>Ignition</gradient>",
                         "<gradient:#ff8a3d:#ffd166>Liftoff</gradient>"))));
-        launchQueuedSubtitles = Collections.unmodifiableList(asStringList(ConfigurationEngine.setList(
+        launchQueuedSubtitles = Collections.unmodifiableList(ConfigLists.asStringList(ConfigurationEngine.setList(
                 List.of("Subtitle pool paired with the launch start title."),
                 fileConfiguration, "titles.launchQueuedSubtitles", List.of(
                         "<gradient:#fff4c2:#ffc36b>$cannon</gradient>"))));
-        destinationPreviewTitles = Collections.unmodifiableList(asStringList(ConfigurationEngine.setList(
+        destinationPreviewTitles = Collections.unmodifiableList(ConfigLists.asStringList(ConfigurationEngine.setList(
                 List.of("Title pool shown while the cannon is previewing destinations."),
                 fileConfiguration, "titles.destinationPreviewTitles", List.of(
                         "<gradient:#ff9f43:#ffe08a>Calibrating</gradient>",
                         "<gradient:#ff9f43:#ffe08a>Scanning</gradient>",
                         "<gradient:#ff9f43:#ffe08a>Targeting</gradient>"))));
-        destinationConfirmedTitles = Collections.unmodifiableList(asStringList(ConfigurationEngine.setList(
+        destinationConfirmedTitles = Collections.unmodifiableList(ConfigLists.asStringList(ConfigurationEngine.setList(
                 List.of("Title pool shown right before teleport commits."),
                 fileConfiguration, "titles.destinationConfirmedTitles", List.of(
                         "<gradient:#7dffb3:#d7ff95>Locked</gradient>",
                         "<gradient:#7dffb3:#d7ff95>Set</gradient>",
                         "<gradient:#7dffb3:#d7ff95>Engaged</gradient>"))));
-        arrivalTitles = Collections.unmodifiableList(asStringList(ConfigurationEngine.setList(
+        arrivalTitles = Collections.unmodifiableList(ConfigLists.asStringList(ConfigurationEngine.setList(
                 List.of("Title pool shown after the player is dropped over the destination."),
                 fileConfiguration, "titles.arrivalTitles", List.of(
                         "<gradient:#ffffff:#cfe8ff>Arrived</gradient>",
                         "<gradient:#ffffff:#cfe8ff>Touchdown</gradient>",
                         "<gradient:#ffffff:#cfe8ff>Airborne</gradient>"))));
-        arrivalSubtitles = Collections.unmodifiableList(asStringList(ConfigurationEngine.setList(
+        arrivalSubtitles = Collections.unmodifiableList(ConfigLists.asStringList(ConfigurationEngine.setList(
                 List.of("Subtitle pool shown after the player is dropped over the destination.",
                         "CannonRTP picks one line at random each launch."),
                 fileConfiguration, "titles.arrivalSubtitles", List.of(
@@ -223,15 +229,5 @@ public class CannonMessagesConfig extends ConfigurationFile {
                         "<gradient:#ffe8c4:#ffd27a>Eyes up. Ground soon.</gradient>",
                         "<gradient:#e6f8ff:#9ee0ff>Wind check complete. Good luck.</gradient>",
                         "<gradient:#fff0d7:#ffc97d>Drop zone acquired. Good luck.</gradient>"))));
-    }
-
-    private static java.util.List<String> asStringList(List<?> rawList) {
-        java.util.List<String> values = new java.util.ArrayList<>();
-        for (Object object : rawList) {
-            if (object != null) {
-                values.add(String.valueOf(object));
-            }
-        }
-        return values;
     }
 }

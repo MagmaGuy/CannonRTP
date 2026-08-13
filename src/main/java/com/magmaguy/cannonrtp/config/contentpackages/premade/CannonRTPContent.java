@@ -14,6 +14,5 @@ public class CannonRTPContent extends ContentPackageConfigFields {
                 "https://nightbreak.io/plugin/cannonrtp/",
                 "cannonrtp");
         setNightbreakSlug("cannonrtp");
-        setContentFilePrefixes(List.of("cannonrtp"));
     }
 }

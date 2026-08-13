@@ -17,12 +17,13 @@ public class LandsProtectionAdapter implements ProtectionAdapter {
     }
 
     @Override
-    public ProtectionQueryResult query(Location location) {
-        if (CannonRTP.getInstance() == null) {
-            return ProtectionQueryResult.pass();
-        }
-
-        LandsIntegration integration = LandsIntegration.of(CannonRTP.getInstance());
+    public ProtectionQueryResult query(Location location) throws Exception {
+        CannonRTP plugin = ProtectionAdapter.requireProvider(
+                CannonRTP.getInstance(),
+                "CannonRTP plugin instance for Lands");
+        LandsIntegration integration = ProtectionAdapter.requireProvider(
+                LandsIntegration.of(plugin),
+                "Lands integration");
         Area area = integration.getArea(location);
         if (area == null) {
             area = integration.getUnloadedArea(location);
@@ -36,10 +37,6 @@ public class LandsProtectionAdapter implements ProtectionAdapter {
         return ProtectionSettingsConfig.isLandsAllowClaimedAreas()
                 ? ProtectionQueryResult.pass()
                 : blocked("a claimed Lands area");
-    }
-
-    private ProtectionQueryResult blocked(String reason) {
-        return ProtectionQueryResult.blocked(PLUGIN_NAME, reason);
     }
 }
 

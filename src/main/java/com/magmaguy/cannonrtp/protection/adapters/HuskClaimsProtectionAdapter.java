@@ -18,9 +18,16 @@ public class HuskClaimsProtectionAdapter implements ProtectionAdapter {
     }
 
     @Override
-    public ProtectionQueryResult query(Location location) {
-        BukkitHuskClaimsAPI api = BukkitHuskClaimsAPI.getInstance();
-        Optional<Claim> claim = api.getClaimAt(api.getPosition(location));
+    public ProtectionQueryResult query(Location location) throws Exception {
+        BukkitHuskClaimsAPI api = ProtectionAdapter.requireProvider(
+                BukkitHuskClaimsAPI.getInstance(),
+                "HuskClaims Bukkit API");
+        var position = ProtectionAdapter.requireProvider(
+                api.getPosition(location),
+                "HuskClaims position");
+        Optional<Claim> claim = ProtectionAdapter.requireProvider(
+                api.getClaimAt(position),
+                "HuskClaims claim query");
         if (claim.isEmpty()) {
             return ProtectionSettingsConfig.isHuskClaimsAllowWilderness()
                     ? ProtectionQueryResult.pass()
@@ -35,10 +42,6 @@ public class HuskClaimsProtectionAdapter implements ProtectionAdapter {
         return ProtectionSettingsConfig.isHuskClaimsAllowPlayerClaims()
                 ? ProtectionQueryResult.pass()
                 : blocked("a HuskClaims player claim");
-    }
-
-    private ProtectionQueryResult blocked(String reason) {
-        return ProtectionQueryResult.blocked(PLUGIN_NAME, reason);
     }
 }
 

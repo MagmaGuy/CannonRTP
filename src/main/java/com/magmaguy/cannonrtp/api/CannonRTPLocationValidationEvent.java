@@ -7,13 +7,15 @@ import org.bukkit.event.HandlerList;
 
 /**
  * Fired for each candidate landing location as CannonRTP validates it during the
- * preload search. Listeners may veto a candidate by calling {@link #setRejected(String)}
- * — CannonRTP will discard the candidate as if it had failed an internal check
- * and continue searching. Useful for custom region checks beyond the built-in
- * protection integrations.
+ * preload search, and fired again for the consumed destination when a launch
+ * revalidates it at commit time (just before the teleport). Listeners may veto a
+ * location by calling {@link #setRejected(String)} — during preload CannonRTP
+ * discards the candidate as if it had failed an internal check and continues
+ * searching; at commit time the launch is cancelled and the player recovered.
+ * Useful for custom region checks beyond the built-in protection integrations.
  *
  * <p>Non-cancellable in the Bukkit sense — use {@code setRejected} to signal
- * rejection. Fired on the main thread during preload attempts.</p>
+ * rejection. Both dispatches occur on the main thread.</p>
  */
 public class CannonRTPLocationValidationEvent extends Event {
     private static final HandlerList HANDLERS = new HandlerList();

@@ -5,6 +5,7 @@ import com.magmaguy.cannonrtp.util.MessageUtils;
 import com.magmaguy.magmacore.command.AdvancedCommand;
 import com.magmaguy.magmacore.command.CommandData;
 import com.magmaguy.magmacore.command.CommandManager;
+import org.bukkit.command.CommandSender;
 
 import java.util.List;
 
@@ -28,15 +29,19 @@ public class HelpCommand extends AdvancedCommand {
 
     @Override
     public void execute(CommandData commandData) {
-        MessageUtils.sendRaw(commandData.getCommandSender(), CannonMessagesConfig.getHelpHeader());
+        printHelp(commandData.getCommandSender());
+    }
+
+    public static void printHelp(CommandSender sender) {
+        MessageUtils.sendRaw(sender, CannonMessagesConfig.getHelpHeader());
         CommandManager commandManager = CommandHandler.getCannonRTPCommandManager();
         if (commandManager == null) return;
         for (AdvancedCommand command : commandManager.commands) {
             if (!command.getPermission().isBlank()
-                    && !commandData.getCommandSender().hasPermission(command.getPermission())) {
+                    && !sender.hasPermission(command.getPermission())) {
                 continue;
             }
-            commandData.getCommandSender().sendMessage(
+            sender.sendMessage(
                     "  " + command.getUsage() + " - " + command.getDescription());
         }
     }

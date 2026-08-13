@@ -16,13 +16,15 @@ public class GriefPreventionProtectionAdapter implements ProtectionAdapter {
     }
 
     @Override
-    public ProtectionQueryResult query(Location location) {
-        GriefPrevention griefPrevention = GriefPrevention.instance;
-        if (griefPrevention == null || griefPrevention.dataStore == null) {
-            return ProtectionQueryResult.pass();
-        }
+    public ProtectionQueryResult query(Location location) throws Exception {
+        GriefPrevention griefPrevention = ProtectionAdapter.requireProvider(
+                GriefPrevention.instance,
+                "GriefPrevention plugin singleton");
+        var dataStore = ProtectionAdapter.requireProvider(
+                griefPrevention.dataStore,
+                "GriefPrevention data store");
 
-        Claim claim = griefPrevention.dataStore.getClaimAt(location, false, null);
+        Claim claim = dataStore.getClaimAt(location, false, null);
         if (claim == null) {
             return ProtectionSettingsConfig.isGriefPreventionAllowWilderness()
                     ? ProtectionQueryResult.pass()
@@ -38,10 +40,6 @@ public class GriefPreventionProtectionAdapter implements ProtectionAdapter {
         return ProtectionSettingsConfig.isGriefPreventionAllowPlayerClaims()
                 ? ProtectionQueryResult.pass()
                 : blocked("a GriefPrevention player claim");
-    }
-
-    private ProtectionQueryResult blocked(String reason) {
-        return ProtectionQueryResult.blocked(PLUGIN_NAME, reason);
     }
 }
 

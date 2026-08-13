@@ -1,7 +1,6 @@
 package com.magmaguy.cannonrtp;
 
 import com.magmaguy.cannonrtp.commands.CommandHandler;
-import com.magmaguy.cannonrtp.commands.ReloadCommand;
 import com.magmaguy.cannonrtp.config.CannonMessagesConfig;
 import com.magmaguy.cannonrtp.config.CannonSoundsConfig;
 import com.magmaguy.cannonrtp.config.DefaultConfig;
@@ -28,7 +27,6 @@ import com.magmaguy.magmacore.util.Logger;
 import com.magmaguy.magmacore.util.VersionChecker;
 import lombok.Getter;
 import org.bukkit.Location;
-import org.bukkit.command.CommandSender;
 import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -95,8 +93,11 @@ public final class CannonRTP extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        boolean shutdownDuringInitialization =
+                MagmaCore.getInitializationState(this.getName())
+                        == PluginInitializationState.INITIALIZING;
         MagmaCore.requestInitializationShutdown(this);
-        if (MagmaCore.getInitializationState(this.getName()) == PluginInitializationState.INITIALIZING) {
+        if (shutdownDuringInitialization) {
             getServer().getScheduler().cancelTasks(this);
             MagmaCore.shutdown(this);
             HandlerList.unregisterAll(this);
@@ -168,9 +169,5 @@ public final class CannonRTP extends JavaPlugin {
         } else {
             Logger.warn("Failed to register /cannonrtp because it is missing from plugin.yml.");
         }
-    }
-
-    public void reloadImportedContent(CommandSender sender) {
-        ReloadCommand.reload(sender);
     }
 }

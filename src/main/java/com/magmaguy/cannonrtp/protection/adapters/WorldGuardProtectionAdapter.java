@@ -20,16 +20,22 @@ public class WorldGuardProtectionAdapter implements ProtectionAdapter {
     }
 
     @Override
-    public ProtectionQueryResult query(Location location) {
-        ApplicableRegionSet regionSet = WorldGuard.getInstance()
-                .getPlatform()
-                .getRegionContainer()
-                .createQuery()
-                .getApplicableRegions(BukkitAdapter.adapt(location));
-
-        if (regionSet == null) {
-            return ProtectionQueryResult.pass();
-        }
+    public ProtectionQueryResult query(Location location) throws Exception {
+        WorldGuard worldGuard = ProtectionAdapter.requireProvider(
+                WorldGuard.getInstance(),
+                "WorldGuard singleton");
+        var platform = ProtectionAdapter.requireProvider(
+                worldGuard.getPlatform(),
+                "WorldGuard platform");
+        var regionContainer = ProtectionAdapter.requireProvider(
+                platform.getRegionContainer(),
+                "WorldGuard region container");
+        var regionQuery = ProtectionAdapter.requireProvider(
+                regionContainer.createQuery(),
+                "WorldGuard region query");
+        ApplicableRegionSet regionSet = ProtectionAdapter.requireProvider(
+                regionQuery.getApplicableRegions(BukkitAdapter.adapt(location)),
+                "WorldGuard applicable-region set");
 
         boolean onlyGlobal = true;
         for (ProtectedRegion region : regionSet) {
@@ -52,17 +58,10 @@ public class WorldGuardProtectionAdapter implements ProtectionAdapter {
             return blocked("protected region " + regionId);
         }
 
-        if (onlyGlobal && ProtectionSettingsConfig.isWorldGuardAllowGlobalRegionOnly()) {
-            return ProtectionQueryResult.pass();
+        if (onlyGlobal && !ProtectionSettingsConfig.isWorldGuardAllowGlobalRegionOnly()) {
+            return blocked("a global protection rule");
         }
-
-        return onlyGlobal
-                ? blocked("a global protection rule")
-                : ProtectionQueryResult.pass();
-    }
-
-    private ProtectionQueryResult blocked(String reason) {
-        return ProtectionQueryResult.blocked(PLUGIN_NAME, reason);
+        return ProtectionQueryResult.pass();
     }
 }
 

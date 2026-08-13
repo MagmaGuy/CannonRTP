@@ -5,7 +5,6 @@ import com.magmaguy.magmacore.config.ConfigurationFile;
 import com.magmaguy.magmacore.nightbreak.NightbreakPluginUpdater;
 import lombok.Getter;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class DefaultConfig extends ConfigurationFile {
@@ -15,6 +14,8 @@ public class DefaultConfig extends ConfigurationFile {
     private static String language;
     @Getter
     private static int particleIntervalTicks;
+    @Getter
+    private static int launchCooldownSeconds;
     @Getter
     private static List<String> cannonModelPriority;
     @Getter
@@ -46,10 +47,15 @@ public class DefaultConfig extends ConfigurationFile {
                 List.of("Translation file to load. 'english' uses plugin defaults.",
                         "Release 1 ships English-only; this key exists so future translation packs can target it."),
                 fileConfiguration, "language", "english");
-        particleIntervalTicks = Math.max(5, ConfigurationEngine.setInt(
-                List.of("How frequently CannonRTP renders idle particles for enabled cannons."),
+        particleIntervalTicks = Math.max(1, ConfigurationEngine.setInt(
+                List.of("Exact interval, in server ticks, between idle particle renders for enabled cannons.",
+                        "Set to 1 to render every tick."),
                 fileConfiguration, "runtime.particleIntervalTicks", 15));
-        cannonModelPriority = asStringList(ConfigurationEngine.setList(
+        launchCooldownSeconds = Math.max(0, ConfigurationEngine.setInt(
+                List.of("How many seconds a player must wait between accepted cannon launches.",
+                        "The cooldown starts only after a launch event is accepted. Set to 0 to disable."),
+                fileConfiguration, "runtime.launchCooldownSeconds", 30));
+        cannonModelPriority = ConfigLists.asStringList(ConfigurationEngine.setList(
                 List.of("Priority list of cannon model names, checked top to bottom.",
                         "The first model found on the server will be used.",
                         "If none are found, particles are used instead."),
@@ -58,15 +64,5 @@ public class DefaultConfig extends ConfigurationFile {
         spigotResourceId = ConfigurationEngine.setString(
                 List.of("Spigot resource ID used by the version checker. Leave blank to disable."),
                 fileConfiguration, "runtime.spigotResourceId", "");
-    }
-
-    private List<String> asStringList(List<?> rawList) {
-        List<String> values = new ArrayList<>();
-        for (Object object : rawList) {
-            if (object != null) {
-                values.add(String.valueOf(object));
-            }
-        }
-        return values;
     }
 }

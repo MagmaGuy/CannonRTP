@@ -20,8 +20,11 @@ import org.bukkit.entity.TextDisplay;
 import java.util.ArrayDeque;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 public class ConfiguredCannonRTP {
+    private static final int FMM_MODEL_RETRY_INTERVAL_TICKS = 20;
     /**
      * The configuration file's id (filename without .yml). Multiple ConfiguredCannonRTP
      * instances share the same configId when one config drives several in-world
@@ -46,31 +49,33 @@ public class ConfiguredCannonRTP {
     @Getter
     private final ArrayDeque<Location> queuedLocations = new ArrayDeque<>();
     private final Map<SearchFailureReason, Integer> failures = new EnumMap<>(SearchFailureReason.class);
-    private final Map<java.util.UUID, Long> lastNotifyMs = new java.util.HashMap<>();
+    private final Map<UUID, Long> lastNotifyMs = new java.util.HashMap<>();
+    private final LaunchCancellationBackoffTracker launchCancellationBackoffs = new LaunchCancellationBackoffTracker();
+    private final LaunchTriggerLatch launchTriggerLatch = new LaunchTriggerLatch();
 
     @Getter
     private CannonSearchState searchState = CannonSearchState.SEARCHING;
-    @Getter
     private int searchAttempts = 0;
     @Getter
     private String lastStatusDetail = "Still searching.";
     private TextDisplay labelDisplay;
     private StaticEntity staticModel;
-    private String lastLabelText = "";
+    private String lastRawLabelText = "";
 
     @Getter
     private Location cannonLocation;
-    @Getter
     private boolean chunkLoaded;
-    @Getter
     private boolean cannonWorldLoaded;
     private World cachedTargetWorld;
     private int cannonChunkX;
     private int cannonChunkZ;
+    private boolean targetWorldUnavailable;
 
     private Boolean cachedUseCustomModel;
     private String cachedResolvedModelName;
     private boolean lastLabelHasModel = false;
+    private boolean fmmModelRecreationPending;
+    private int fmmModelRetryTicks;
 
     public ConfiguredCannonRTP(String configId,
                                String instanceId,
@@ -94,6 +99,15 @@ public class ConfiguredCannonRTP {
         return cannonLocation != null && cannonLocation.getWorld() != null
                 ? cannonLocation.getWorld().getName()
                 : null;
+    }
+
+    /**
+     * The world this cannon actually teleports to: the configured target world, or
+     * this cannon's own world when no explicit target is set.
+     */
+    public String getEffectiveTargetWorldName() {
+        String configured = configFields.getTargetWorldName();
+        return configured == null || configured.isBlank() ? getCannonWorldName() : configured;
     }
 
     public int getCannonChunkX() {
@@ -132,8 +146,46 @@ public class ConfiguredCannonRTP {
         chunkLoaded = false;
     }
 
-    public void invalidateCachedTargetWorld() {
+    private void invalidateCachedTargetWorld() {
         cachedTargetWorld = null;
+    }
+
+    /**
+     * Removes destinations backed by an unloading Bukkit world instance. This
+     * applies even when this cannon is physically placed in another world.
+     */
+    public int purgeQueuedLocationsForWorld(String worldName) {
+        int before = queuedLocations.size();
+        queuedLocations.removeIf(location -> location.getWorld() != null
+                && worldName.equals(location.getWorld().getName()));
+        int removed = before - queuedLocations.size();
+        if (removed > 0) {
+            restartSearchWindow();
+        }
+        return removed;
+    }
+
+    boolean isTargetWorldUnavailable() {
+        return targetWorldUnavailable;
+    }
+
+    public void markTargetWorldUnavailable(String worldName) {
+        targetWorldUnavailable = true;
+        invalidateCachedTargetWorld();
+        purgeQueuedLocationsForWorld(worldName);
+        failures.clear();
+        searchAttempts = 0;
+        searchState = CannonSearchState.SEARCHING;
+        lastStatusDetail = "Target world " + worldName + " is not loaded.";
+    }
+
+    public void notifyTargetWorldLoaded() {
+        invalidateCachedTargetWorld();
+        if (!targetWorldUnavailable) {
+            return;
+        }
+        targetWorldUnavailable = false;
+        restartSearchWindow();
     }
 
     /**
@@ -142,16 +194,24 @@ public class ConfiguredCannonRTP {
      */
     public void remove(RemovalReason reason) {
         removeVisuals();
+        lastNotifyMs.clear();
+        launchCancellationBackoffs.clear();
+        launchTriggerLatch.clear();
         switch (reason) {
             case CHUNK_UNLOAD -> chunkLoaded = false;
             case WORLD_UNLOAD -> {
+                // A queued destination holds a live Bukkit World reference. After a world
+                // unload that reference points at a detached CraftWorld instance, so the
+                // reserve is dropped and rebuilt once this cannon is active again.
+                // CHUNK_UNLOAD deliberately retains the queue: the same World instance
+                // stays live, so queued destinations remain valid.
+                queuedLocations.clear();
                 cannonWorldLoaded = false;
                 chunkLoaded = false;
             }
-            case REMOVE_COMMAND, DELETE_COMMAND, RELOAD, SHUTDOWN -> {
-                // Instance is being discarded; no further field updates needed.
-            }
+            case RELOAD, SHUTDOWN -> queuedLocations.clear();
         }
+        restartSearchWindow();
     }
 
     public boolean shouldNotify(Player player, long throttleMs) {
@@ -166,8 +226,55 @@ public class ConfiguredCannonRTP {
         lastNotifyMs.remove(player.getUniqueId());
     }
 
-    public void clearNotifyThrottle(java.util.UUID playerId) {
+    public void clearNotifyThrottle(UUID playerId) {
         lastNotifyMs.remove(playerId);
+    }
+
+    boolean isLaunchCancellationBackoffActive(UUID playerId, long nowNanos) {
+        return launchCancellationBackoffs.isBlocked(playerId, nowNanos);
+    }
+
+    void recordLaunchCancellation(UUID playerId, long nowNanos) {
+        launchCancellationBackoffs.recordCancellation(playerId, nowNanos);
+    }
+
+    void clearLaunchCancellationBackoff(UUID playerId) {
+        launchCancellationBackoffs.clear(playerId);
+    }
+
+    boolean hasLaunchCancellationBackoffs() {
+        return !launchCancellationBackoffs.isEmpty();
+    }
+
+    void retainLaunchCancellationBackoffs(Set<UUID> playersInsideTrigger) {
+        launchCancellationBackoffs.retainPlayers(playersInsideTrigger);
+    }
+
+    boolean isLaunchTriggerLatched(UUID playerId) {
+        return launchTriggerLatch.isLatched(playerId);
+    }
+
+    Set<UUID> getLatchedLaunchTriggerPlayers() {
+        return launchTriggerLatch.snapshot();
+    }
+
+    void latchLaunchTrigger(UUID playerId) {
+        launchTriggerLatch.latch(playerId);
+    }
+
+    void observeLaunchTriggerPosition(
+            UUID playerId,
+            boolean insideTrigger,
+            boolean launchActive
+    ) {
+        launchTriggerLatch.observePosition(
+                playerId,
+                insideTrigger,
+                launchActive);
+    }
+
+    void releaseLaunchTrigger(UUID playerId) {
+        launchTriggerLatch.release(playerId);
     }
 
     /**
@@ -178,8 +285,7 @@ public class ConfiguredCannonRTP {
         return isEnabled()
                 && cannonLocation != null
                 && cannonWorldLoaded
-                && chunkLoaded
-                && searchState != CannonSearchState.INVALID_CONFIGURATION;
+                && chunkLoaded;
     }
 
     public String getDisplayName() {
@@ -241,17 +347,9 @@ public class ConfiguredCannonRTP {
     }
 
     public void handleChunkLoad() {
-        if (needsMoreLocations() && searchState != CannonSearchState.INVALID_CONFIGURATION) {
+        if (needsMoreLocations()) {
             restartSearchWindow();
         }
-    }
-
-    public String getCustomModelName() {
-        if (cachedUseCustomModel != null) {
-            return cachedResolvedModelName == null ? "" : cachedResolvedModelName;
-        }
-        resolveModelCache();
-        return cachedResolvedModelName == null ? "" : cachedResolvedModelName;
     }
 
     private void resolveModelCache() {
@@ -290,6 +388,21 @@ public class ConfiguredCannonRTP {
         cachedResolvedModelName = null;
     }
 
+    /**
+     * FMM tears down every StaticEntity during an imported-content reload while
+     * consumer references remain non-null. Drop that stale reference so the next
+     * label refresh resolves the rebuilt registry and creates a fresh model.
+     */
+    public void resetModelAfterFmmReload() {
+        if (staticModel != null) {
+            staticModel.remove();
+            staticModel = null;
+        }
+        invalidateModelCache();
+        fmmModelRecreationPending = true;
+        fmmModelRetryTicks = 0;
+    }
+
     public boolean hasTimedOut() {
         return searchAttempts >= LandingSearchConfig.getSearchTimeoutAttempts();
     }
@@ -298,29 +411,33 @@ public class ConfiguredCannonRTP {
         return Math.max(0, LandingSearchConfig.getSearchTimeoutAttempts() - searchAttempts);
     }
 
-    public void markReady() {
-        searchState = CannonSearchState.READY;
-        lastStatusDetail = "Safe locations preloaded.";
-    }
-
-    public void markInvalidConfiguration(String reason) {
-        searchState = CannonSearchState.INVALID_CONFIGURATION;
-        lastStatusDetail = reason;
-    }
-
     public void markSearchFailure(SearchFailureReason reason) {
         failures.merge(reason, 1, Integer::sum);
         searchAttempts++;
-        if (searchState != CannonSearchState.INVALID_CONFIGURATION) {
-            searchState = CannonSearchState.SEARCHING;
+        searchState = CannonSearchState.SEARCHING;
+    }
+
+    /**
+     * As {@link #markSearchFailure(SearchFailureReason)}, additionally surfacing the
+     * rejecting plugin's reason in the admin-facing status detail when one was provided.
+     */
+    public void markSearchFailure(SearchFailureReason reason, String rejectionReason) {
+        markSearchFailure(reason);
+        if (rejectionReason != null && !rejectionReason.isBlank()
+                && searchState == CannonSearchState.SEARCHING) {
+            lastStatusDetail = "Rejected by another plugin: " + rejectionReason;
         }
     }
 
     public void markSearchSuccess(Location location) {
-        searchAttempts++;
+        targetWorldUnavailable = false;
         queuedLocations.add(location);
-        searchState = isCharged() ? CannonSearchState.READY : CannonSearchState.SEARCHING;
-        lastStatusDetail = isCharged() ? "Ready." : "Maintaining destination reserve.";
+        searchState = CannonSearchState.SEARCHING;
+        if (!needsMoreLocations()) {
+            lastStatusDetail = "Safe locations preloaded.";
+        } else {
+            lastStatusDetail = isCharged() ? "Ready." : "Maintaining destination reserve.";
+        }
     }
 
     public void exhaustSearch() {
@@ -348,12 +465,10 @@ public class ConfiguredCannonRTP {
     private void restartSearchWindow() {
         failures.clear();
         searchAttempts = 0;
-        if (searchState != CannonSearchState.INVALID_CONFIGURATION) {
-            searchState = isCharged() ? CannonSearchState.READY : CannonSearchState.SEARCHING;
-            lastStatusDetail = queuedLocations.isEmpty()
-                    ? "Charging teleport destinations."
-                    : "Maintaining destination reserve.";
-        }
+        searchState = CannonSearchState.SEARCHING;
+        lastStatusDetail = queuedLocations.isEmpty()
+                ? "Charging teleport destinations."
+                : "Maintaining destination reserve.";
     }
 
     public String buildFailureSummary() {
@@ -361,12 +476,11 @@ public class ConfiguredCannonRTP {
             return "Every sampled location failed validation.";
         }
         StringBuilder summary = new StringBuilder();
-        appendSummary(summary, SearchFailureReason.INVALID_TARGET_WORLD, "the target world is not loaded");
-        appendSummary(summary, SearchFailureReason.INVALID_SEARCH_CENTER, "the configured search center is invalid");
         appendSummary(summary, SearchFailureReason.OUTSIDE_WORLD_BORDER, "most samples landed outside the world border");
         appendSummary(summary, SearchFailureReason.NO_SAFE_SURFACE, "many samples had no safe surface");
         appendSummary(summary, SearchFailureReason.HAZARDOUS_TERRAIN, "many samples were hazardous to land on");
         appendSummary(summary, SearchFailureReason.PROTECTED_LAND, "most samples were inside protected land");
+        appendSummary(summary, SearchFailureReason.API_REJECTED, "many samples were rejected by another plugin");
         return summary.length() == 0 ? "Every sampled location failed validation." : summary.toString();
     }
 
@@ -388,19 +502,17 @@ public class ConfiguredCannonRTP {
                     ? CannonMessagesConfig.getStatusChargingLabel()
                     : CannonMessagesConfig.getStatusMaintainingLabel();
             case EXHAUSTED -> CannonMessagesConfig.getStatusExhaustedLabel();
-            case INVALID_CONFIGURATION -> CannonMessagesConfig.getStatusInvalidLabel();
         };
     }
 
     public void refreshLabel() {
+        // Sole caller (CannonRTPManager.tickAll) already skips instances whose
+        // location or world is unresolved.
         Location loc = getCannonLocation();
-        if (loc == null || loc.getWorld() == null) {
-            removeVisuals();
-            return;
-        }
+        boolean modelInitializationAllowed = reconcileFmmModelAfterReload();
 
         if (shouldUseCustomModel()) {
-            if (staticModel == null) {
+            if (staticModel == null && modelInitializationAllowed) {
                 initializeCustomModel();
             }
         } else if (staticModel != null) {
@@ -423,10 +535,10 @@ public class ConfiguredCannonRTP {
         }
         lastLabelHasModel = modelPresent;
 
-        String nextLabelText = buildLabelText();
-        if (!nextLabelText.equals(lastLabelText)) {
-            labelDisplay.setText(nextLabelText);
-            lastLabelText = nextLabelText;
+        String rawLabelText = buildRawLabelText();
+        if (!rawLabelText.equals(lastRawLabelText)) {
+            lastRawLabelText = rawLabelText;
+            labelDisplay.setText(ChatColorConverter.convert(rawLabelText));
         }
     }
 
@@ -439,28 +551,30 @@ public class ConfiguredCannonRTP {
             staticModel.remove();
             staticModel = null;
         }
-        lastLabelText = "";
+        lastRawLabelText = "";
         lastLabelHasModel = false;
     }
 
     private void spawnLabel(Location loc) {
         Location labelLocation = getLabelLocation(loc);
+        String rawLabelText = buildRawLabelText();
+        String labelText = ChatColorConverter.convert(rawLabelText);
         labelDisplay = labelLocation.getWorld().spawn(labelLocation, TextDisplay.class, display -> {
-            display.setText(buildLabelText());
+            display.setText(labelText);
             display.setPersistent(false);
             display.setBillboard(Display.Billboard.CENTER);
             display.setShadowed(false);
             display.setAlignment(TextDisplay.TextAlignment.CENTER);
         });
-        lastLabelText = buildLabelText();
+        lastRawLabelText = rawLabelText;
     }
 
     private Location getLabelLocation(Location loc) {
         return loc.clone().add(0, staticModel != null ? 2.0 : 1.2, 0);
     }
 
-    private String buildLabelText() {
-        return ChatColorConverter.convert(getDisplayName() + "\n&7" + getStatusDisplay());
+    private String buildRawLabelText() {
+        return getDisplayName() + "\n&7" + getStatusDisplay();
     }
 
     public boolean hasActiveModel() {
@@ -485,10 +599,37 @@ public class ConfiguredCannonRTP {
         if (loc == null || loc.getWorld() == null) {
             return;
         }
-        if (staticModel != null) {
-            staticModel.remove();
-        }
         staticModel = StaticEntity.create(cachedResolvedModelName, loc.clone());
+        if (staticModel != null) {
+            fmmModelRecreationPending = false;
+            fmmModelRetryTicks = 0;
+        } else if (fmmModelRecreationPending) {
+            fmmModelRetryTicks = FMM_MODEL_RETRY_INTERVAL_TICKS;
+        }
+    }
+
+    /**
+     * FMM 2.4.0 predates FmmReloadedEvent but exposes ModeledEntity#isRemoved().
+     * Detect its stale object after an imported-content reload, then re-probe the
+     * rebuilt model registry at a bounded cadence until the model is available.
+     */
+    private boolean reconcileFmmModelAfterReload() {
+        if (staticModel != null && staticModel.isRemoved()) {
+            staticModel = null;
+            invalidateModelCache();
+            fmmModelRecreationPending = true;
+            fmmModelRetryTicks = 0;
+        }
+        if (!fmmModelRecreationPending || staticModel != null) return true;
+        if (!Bukkit.getPluginManager().isPluginEnabled("FreeMinecraftModels")) return false;
+        if (fmmModelRetryTicks > 0) {
+            fmmModelRetryTicks--;
+            if (fmmModelRetryTicks > 0) return false;
+        }
+
+        invalidateModelCache();
+        fmmModelRetryTicks = FMM_MODEL_RETRY_INTERVAL_TICKS;
+        return true;
     }
 
     public void playFireAnimation() {
@@ -501,7 +642,6 @@ public class ConfiguredCannonRTP {
             case READY -> Color.fromRGB(255, 179, 71);
             case SEARCHING -> Color.fromRGB(255, 140, 66);
             case EXHAUSTED -> Color.fromRGB(255, 107, 107);
-            case INVALID_CONFIGURATION -> Color.fromRGB(201, 60, 60);
         };
     }
 
@@ -510,14 +650,10 @@ public class ConfiguredCannonRTP {
             case READY -> Color.fromRGB(255, 241, 168);
             case SEARCHING -> Color.fromRGB(255, 209, 102);
             case EXHAUSTED -> Color.fromRGB(255, 159, 104);
-            case INVALID_CONFIGURATION -> Color.fromRGB(255, 124, 124);
         };
     }
 
     private CannonSearchState getEffectiveSearchState() {
-        if (searchState == CannonSearchState.INVALID_CONFIGURATION) {
-            return CannonSearchState.INVALID_CONFIGURATION;
-        }
         if (isCharged()) {
             return CannonSearchState.READY;
         }

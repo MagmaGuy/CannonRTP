@@ -2,9 +2,6 @@ package com.magmaguy.cannonrtp.config;
 
 import com.magmaguy.magmacore.util.ChatColorConverter;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * CannonRTP wrapper over MagmaCore's CustomConfigFields that adds a translation hook.
  *
@@ -22,21 +19,11 @@ public abstract class CannonRTPCustomConfigFields extends com.magmaguy.magmacore
     /**
      * Marks a string as translatable and returns the display-ready (color-converted) value.
      * Translators see the raw template; players see expanded gradients/hex.
+     * The filename and key parameters are currently unused; they are reserved for a
+     * future translation backend.
      */
     protected String translatable(String filename, String key, String value) {
         if (value == null) return null;
         return ChatColorConverter.convert(value);
-    }
-
-    /**
-     * Marks a string list as translatable and returns display-ready values.
-     */
-    protected List<String> translatable(String filename, String key, List<String> value) {
-        if (value == null) return null;
-        List<String> converted = new ArrayList<>(value.size());
-        for (String entry : value) {
-            converted.add(entry == null ? null : ChatColorConverter.convert(entry));
-        }
-        return converted;
     }
 }
