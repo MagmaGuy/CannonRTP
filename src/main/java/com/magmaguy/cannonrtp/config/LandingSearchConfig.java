@@ -6,6 +6,7 @@ import com.magmaguy.magmacore.util.Logger;
 import lombok.Getter;
 import org.bukkit.Material;
 
+import java.io.File;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -27,6 +28,10 @@ public class LandingSearchConfig extends ConfigurationFile {
 
     public LandingSearchConfig() {
         super("landing.yml");
+    }
+
+    public LandingSearchConfig(File file) {
+        super(file);
     }
 
     public static boolean isUnsafeGroundMaterial(Material material) {
