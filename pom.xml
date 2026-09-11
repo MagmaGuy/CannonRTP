@@ -6,7 +6,7 @@
 
     <groupId>com.magmaguy</groupId>
     <artifactId>CannonRTP</artifactId>
-    <version>1.2.1</version>
+    <version>1.2.2</version>
 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
@@ -207,6 +207,19 @@
             </plugin>
         </plugins>
     </build>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>magmaguy-repo-snapshots</id>
+            <url>https://repo.magmaguy.com/snapshots</url>
+        </snapshotRepository>
+        <repository>
+            <id>magmaguy-repo</id>
+            <name>MagmaGuy's Repository</name>
+            <url>https://repo.magmaguy.com/releases</url>
+        </repository>
+    </distributionManagement>
+
     <!-- Mirror the built plugin jar to the shared top-level dist/ folder.
          Active only when MC_DIST_DIR is set, so clones/CI/public builds stay
          unaffected and no machine-specific path is ever committed. -->

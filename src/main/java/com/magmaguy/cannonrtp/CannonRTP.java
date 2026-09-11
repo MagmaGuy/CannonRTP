@@ -43,7 +43,7 @@ public final class CannonRTP extends JavaPlugin {
     public static final NightbreakFirstTimeSetupSpec FIRST_TIME_SETUP_SPEC = new NightbreakFirstTimeSetupSpec(
             "CannonRTP",
             "cannonrtp.admin",
-            null,
+            "/wc initialize",
             "/wc setup",
             "/wc downloadall",
             "https://nightbreak.io/plugin/cannonrtp/",
