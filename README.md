@@ -44,7 +44,7 @@ The landing check considers the full occupied column and world border. If a cann
 
 Back up cannon configuration before deleting definitions or changing a live destination. Include `/wc status`, server and plugin versions, the affected cannon settings, and full logs when reporting a problem.
 
-## Building and integration
+## Building from source
 
 Build from the repository root with JDK 21 and Maven:
 
@@ -54,4 +54,8 @@ mvn -DskipTests package
 
 The deployable file is `target/CannonRTP.jar`. Set `MC_DIST_DIR` to mirror it into a shared output directory. Publish a changed MagmaCore dependency to Maven Local before rebuilding.
 
-This checkout's release is `1.2.2`. Integrations can use `com.magmaguy:CannonRTP:1.2.2` from [MagmaGuy's Maven repository](https://repo.magmaguy.com/releases), with Maven `provided` or Gradle `compileOnly` scope.
+## Developer API
+
+Cannon launch, destination validation and landing events: [CannonRTP developer reference](https://wiki.nightbreak.io/WorldCannon/api). See the [Java API index](https://wiki.nightbreak.io/developers) for dependency setup and lifecycle guidance.
+
+Maven: `com.magmaguy:CannonRTP:1.2.2` from [MagmaGuy's repository](https://repo.magmaguy.com/releases). Use `provided` or `compileOnly` scope for the installed plugin.
