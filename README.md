@@ -56,6 +56,8 @@ The deployable file is `target/CannonRTP.jar`. Set `MC_DIST_DIR` to mirror it in
 
 ## Developer API
 
+[Java class and method reference](https://wiki.nightbreak.io/javadoc/cannonrtp/index.html).
+
 Cannon launch, destination validation and landing events: [CannonRTP developer reference](https://wiki.nightbreak.io/WorldCannon/api). See the [Java API index](https://wiki.nightbreak.io/developers) for dependency setup and lifecycle guidance.
 
-Maven: `com.magmaguy:CannonRTP:1.2.2` from [MagmaGuy's repository](https://repo.magmaguy.com/releases). Use `provided` or `compileOnly` scope for the installed plugin.
+Maven: `com.magmaguy:CannonRTP:1.2.2` from [MagmaGuy's repository](https://repo.magmaguy.com/#/releases). Use `provided` or `compileOnly` scope for the installed plugin.
