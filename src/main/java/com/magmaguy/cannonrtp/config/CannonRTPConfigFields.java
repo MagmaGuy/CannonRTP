@@ -70,7 +70,10 @@ public class CannonRTPConfigFields extends CannonRTPCustomConfigFields {
                 searchCenter == null ? null : ConfigurationLocation.deserialize(searchCenter), null, false);
         searchCenter = ConfigurationLocation.serialize(serializedSearchCenter, true);
 
-        triggerRadius = Math.max(0.5, processDouble("triggerRadius", triggerRadius, 1.75, true));
+        triggerRadius = processDouble("triggerRadius", triggerRadius, 1.75, true);
+        if (!Double.isFinite(triggerRadius))
+            throw new IllegalArgumentException("triggerRadius must be finite in " + filename);
+        triggerRadius = Math.max(0.5, triggerRadius);
         minSearchRadius = Math.max(0, processInt("minSearchRadius", minSearchRadius, 500, true));
         maxSearchRadius = Math.max(minSearchRadius + 1, processInt("maxSearchRadius", maxSearchRadius, 5000, true));
         launchWarmupTicks = Math.max(1, processInt("launchWarmupTicks", launchWarmupTicks, 42, true));

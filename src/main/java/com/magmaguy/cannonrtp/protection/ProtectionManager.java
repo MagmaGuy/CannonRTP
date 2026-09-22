@@ -46,6 +46,13 @@ public class ProtectionManager {
         return inspect(location).allowed();
     }
 
+    public static boolean isSearchBlockedByInitialization() {
+        if (LandingSearchConfig.isFailOpenOnProtectionErrors()) return false;
+        for (ProtectionAdapter adapter : activeAdapters)
+            if (adapter instanceof UnavailableProtectionAdapter) return true;
+        return false;
+    }
+
     public static ProtectionQueryResult inspect(Location location) {
         for (ProtectionAdapter adapter : activeAdapters) {
             try {
@@ -78,10 +85,10 @@ public class ProtectionManager {
         }
 
         @Override
-        public ProtectionQueryResult query(Location location)
-                throws ProtectionProviderUnavailableException {
-            throw new ProtectionProviderUnavailableException(
-                    pluginName + " adapter failed to initialize (" + failure + ")");
+        public ProtectionQueryResult query(Location location) {
+            return LandingSearchConfig.isFailOpenOnProtectionErrors()
+                    ? ProtectionQueryResult.pass()
+                    : ProtectionQueryResult.blocked(pluginName, "its adapter failed to initialize (" + failure + ")");
         }
     }
 }

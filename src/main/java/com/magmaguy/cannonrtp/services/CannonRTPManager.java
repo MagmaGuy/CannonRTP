@@ -57,6 +57,9 @@ public class CannonRTPManager {
      */
     private final Map<UUID, Long> launchCooldownExpiryNanos = new HashMap<>();
     private final List<ConfiguredCannonRTP> activeCannons = new ArrayList<>();
+    private final Set<ConfiguredCannonRTP> activeMembership = new HashSet<>();
+    private record CannonBucket(String worldName, long key) {}
+    private final Map<ConfiguredCannonRTP, CannonBucket> cannonBuckets = new java.util.IdentityHashMap<>();
     private final Map<String, Map<Long, List<ConfiguredCannonRTP>>> cannonsByChunk = new HashMap<>();
 
     private List<String> cachedKnownCannonIds;
@@ -92,6 +95,8 @@ public class CannonRTPManager {
         }
         configuredCannons.clear();
         activeCannons.clear();
+        activeMembership.clear();
+        cannonBuckets.clear();
         cannonsByChunk.clear();
         cachedKnownCannonIds = null;
         preloadRoundRobinIndex = 0;
@@ -136,6 +141,8 @@ public class CannonRTPManager {
         }
         configuredCannons.clear();
         activeCannons.clear();
+        activeMembership.clear();
+        cannonBuckets.clear();
         cannonsByChunk.clear();
         cachedKnownCannonIds = null;
         launchCooldownExpiryNanos.clear();
@@ -433,6 +440,12 @@ public class CannonRTPManager {
             CannonSearchState state = cannon.getSearchState();
             if (state == CannonSearchState.EXHAUSTED
                     || !cannon.needsMoreLocations()) {
+                continue;
+            }
+
+            if (ProtectionManager.isSearchBlockedByInitialization()) {
+                cannon.markSearchFailure(SearchFailureReason.PROTECTED_LAND);
+                cannon.exhaustSearch();
                 continue;
             }
 
@@ -811,6 +824,8 @@ public class CannonRTPManager {
         int maxChunkX = ((int) Math.floor(center.getX() + radius)) >> 4;
         int minChunkZ = ((int) Math.floor(center.getZ() - radius)) >> 4;
         int maxChunkZ = ((int) Math.floor(center.getZ() + radius)) >> 4;
+        long bucketCount = ((long) maxChunkX - minChunkX + 1) * ((long) maxChunkZ - minChunkZ + 1);
+        if (bucketCount >= worldPlayers.orderedPlayers().size()) return worldPlayers.orderedPlayers();
         List<PlayerScanEntry> candidates = new ArrayList<>();
         for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
             for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
@@ -941,6 +956,7 @@ public class CannonRTPManager {
         String worldName = cannon.getCannonWorldName();
         if (worldName == null) return;
         long key = packChunkKey(cannon.getCannonChunkX(), cannon.getCannonChunkZ());
+        cannonBuckets.put(cannon, new CannonBucket(worldName, key));
         cannonsByChunk
                 .computeIfAbsent(worldName, k -> new HashMap<>())
                 .computeIfAbsent(key, k -> new ArrayList<>(1))
@@ -948,24 +964,25 @@ public class CannonRTPManager {
     }
 
     private void unindexCannon(ConfiguredCannonRTP cannon) {
-        for (Map.Entry<String, Map<Long, List<ConfiguredCannonRTP>>> worldEntry : cannonsByChunk.entrySet()) {
-            Map<Long, List<ConfiguredCannonRTP>> chunkMap = worldEntry.getValue();
-            Iterator<Map.Entry<Long, List<ConfiguredCannonRTP>>> it = chunkMap.entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<Long, List<ConfiguredCannonRTP>> chunkEntry = it.next();
-                if (chunkEntry.getValue().remove(cannon) && chunkEntry.getValue().isEmpty()) {
-                    it.remove();
-                }
-            }
-        }
+        CannonBucket previous = cannonBuckets.remove(cannon);
+        if (previous == null) return;
+        Map<Long, List<ConfiguredCannonRTP>> chunkMap = cannonsByChunk.get(previous.worldName());
+        if (chunkMap == null) return;
+        List<ConfiguredCannonRTP> bucket = chunkMap.get(previous.key());
+        if (bucket == null) return;
+        bucket.remove(cannon);
+        if (bucket.isEmpty()) chunkMap.remove(previous.key());
+        if (chunkMap.isEmpty()) cannonsByChunk.remove(previous.worldName());
     }
 
     private void refreshActiveState(ConfiguredCannonRTP cannon) {
         boolean shouldBeActive = cannon.isActive();
-        boolean isActive = activeCannons.contains(cannon);
+        boolean isActive = activeMembership.contains(cannon);
         if (shouldBeActive && !isActive) {
+            activeMembership.add(cannon);
             activeCannons.add(cannon);
         } else if (!shouldBeActive && isActive) {
+            activeMembership.remove(cannon);
             activeCannons.remove(cannon);
         }
     }
