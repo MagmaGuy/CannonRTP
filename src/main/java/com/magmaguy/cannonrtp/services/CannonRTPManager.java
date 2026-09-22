@@ -216,7 +216,15 @@ public class CannonRTPManager {
                 initialLocations,
                 player.getWorld().getName(),
                 null);
-        new com.magmaguy.magmacore.config.CustomConfig("cannons", CannonRTPConfigFields.class, fields);
+        try {
+            new com.magmaguy.magmacore.config.CustomConfig("cannons", CannonRTPConfigFields.class, fields);
+        } catch (java.io.UncheckedIOException failure) {
+            MessageUtils.send(player, CannonMessagesConfig.getInvalidConfigurationMessage(),
+                    "cannon", sanitizedId,
+                    "reason", "Could not save the cannon configuration. Check the console.");
+            plugin.getLogger().warning("Failed to create cannon " + sanitizedId + ": " + failure.getMessage());
+            return;
+        }
         reload(player);
         CannonRTPConfigFields reloadedFields = CannonRTPConfig.getCannonRTPs().get(filename);
         String configPath = reloadedFields != null && reloadedFields.getFile() != null
@@ -241,8 +249,9 @@ public class CannonRTPManager {
                     "reason", "That cannon does not exist. Use /wc create to make a new one.");
             return;
         }
-        List<String> updated = fields.addCannonLocation(player.getLocation());
-        ConfigurationEngine.writeValue(updated, fields.getFile(), fields.getFileConfiguration(), "cannonLocations");
+        List<String> updated = new ArrayList<>(fields.getCannonLocations());
+        updated.add(ConfigurationLocation.deserialize(player.getLocation()));
+        if (!saveCannonValue(fields, "cannonLocations", updated, player)) return;
         reload(player);
         MessageUtils.send(player, CannonMessagesConfig.getPlacedCannonMessage(),
                 "cannon", fields.getDisplayName());
@@ -283,8 +292,9 @@ public class CannonRTPManager {
                     "reason", "No placement of that cannon found in your world.");
             return;
         }
-        fields.removeCannonLocation(nearest.getLocationString());
-        ConfigurationEngine.writeValue(fields.getCannonLocations(), fields.getFile(), fields.getFileConfiguration(), "cannonLocations");
+        List<String> updated = new ArrayList<>(fields.getCannonLocations());
+        updated.remove(nearest.getLocationString());
+        if (!saveCannonValue(fields, "cannonLocations", updated, player)) return;
         // reload() below already tears down every instance with RemovalReason.RELOAD,
         // which performs the identical cleanup for the removed placement.
         reload(player);
@@ -321,7 +331,7 @@ public class CannonRTPManager {
                     "reason", "That cannon does not exist.");
             return;
         }
-        ConfigurationEngine.writeValue(world.getName(), fields.getFile(), fields.getFileConfiguration(), "targetWorld");
+        if (!saveCannonValue(fields, "targetWorld", world.getName(), sender)) return;
         reload(sender);
         MessageUtils.send(sender, CannonMessagesConfig.getTargetWorldUpdatedMessage(),
                 "cannon", fields.getDisplayName(), "world", world.getName());
@@ -336,10 +346,18 @@ public class CannonRTPManager {
                     "reason", "That cannon does not exist.");
             return;
         }
-        ConfigurationEngine.writeValue(ConfigurationLocation.deserialize(location), fields.getFile(), fields.getFileConfiguration(), "searchCenter");
+        if (!saveCannonValue(fields, "searchCenter", ConfigurationLocation.deserialize(location), sender)) return;
         reload(sender);
         MessageUtils.send(sender, CannonMessagesConfig.getSearchCenterUpdatedMessage(),
                 "cannon", fields.getDisplayName());
+    }
+
+    private boolean saveCannonValue(CannonRTPConfigFields fields, String path, Object value, CommandSender sender) {
+        if (ConfigurationEngine.writeValue(value, fields.getFile(), fields.getFileConfiguration(), path)) return true;
+        MessageUtils.send(sender, CannonMessagesConfig.getInvalidConfigurationMessage(),
+                "cannon", fields.getDisplayName(),
+                "reason", "Could not save " + fields.getFile().getName() + ". The cannon was left unchanged; check the console.");
+        return false;
     }
 
     // ---------------------------------------------------------------------
