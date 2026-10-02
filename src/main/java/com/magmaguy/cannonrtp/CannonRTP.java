@@ -26,6 +26,7 @@ import com.magmaguy.magmacore.nightbreak.NightbreakPluginSpec;
 import com.magmaguy.magmacore.util.Logger;
 import com.magmaguy.magmacore.util.VersionChecker;
 import lombok.Getter;
+import org.bstats.bukkit.Metrics;
 import org.bukkit.Location;
 import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -66,7 +67,7 @@ public final class CannonRTP extends JavaPlugin {
     @Override
     public void onEnable() {
         NightbreakPluginBootstrap.startInitialization(this,
-                new PluginInitializationConfig("CannonRTP", "cannonrtp.admin", 10),
+                new PluginInitializationConfig("CannonRTP", "cannonrtp.admin", 11),
                 NIGHTBREAK_PLUGIN_SPEC,
                 new NightbreakPluginHooks() {
                     @Override
@@ -91,8 +92,16 @@ public final class CannonRTP extends JavaPlugin {
                 });
     }
 
+    private volatile Metrics metrics;
+
     @Override
     public void onDisable() {
+        // bStats runs its own scheduler thread; without this every reload leaves one
+        // reporting for, and holding on to, the previous instance.
+        if (metrics != null) {
+            metrics.shutdown();
+            metrics = null;
+        }
         boolean shutdownDuringInitialization =
                 MagmaCore.getInitializationState(this.getName())
                         == PluginInitializationState.INITIALIZING;
@@ -169,5 +178,8 @@ public final class CannonRTP extends JavaPlugin {
         } else {
             Logger.warn("Failed to register /cannonrtp because it is missing from plugin.yml.");
         }
+
+        initializationContext.step("Metrics");
+        metrics = new Metrics(this, 34460);
     }
 }

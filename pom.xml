@@ -89,6 +89,12 @@
             <scope>compile</scope>
         </dependency>
         <dependency>
+            <groupId>org.bstats</groupId>
+            <artifactId>bstats-bukkit</artifactId>
+            <version>3.0.2</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
             <groupId>com.sk89q.worldedit</groupId>
             <artifactId>worldedit-bukkit</artifactId>
             <version>7.3.0</version>
@@ -195,6 +201,10 @@
                         <relocation>
                             <pattern>com.magmaguy.easyminecraftgoals</pattern>
                             <shadedPattern>com.magmaguy.cannonrtp.easyminecraftgoals</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>org.bstats</pattern>
+                            <shadedPattern>com.magmaguy.cannonrtp.bstats</shadedPattern>
                         </relocation>
                     </relocations>
                 </configuration>
