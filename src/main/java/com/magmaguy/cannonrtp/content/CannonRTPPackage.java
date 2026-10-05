@@ -16,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
@@ -86,9 +87,42 @@ public class CannonRTPPackage extends AbstractNightbreakContentPackage {
     }
 
     private List<File> collectManagedEntries(File rootFolder) {
+        // Package prefixes nest: the free package's "cannonrtp" prefix also matches the
+        // premium package's "cannonrtp_premium" entries. Each entry belongs only to the
+        // package with the most specific claim, so toggling one package never moves
+        // another package's files. Saved contentFilePrefixes keep working unchanged.
         return NightbreakFileUtils.collectRootEntries(rootFolder,
-                contentPackageConfigFields.getFolderName(),
-                contentPackageConfigFields.getContentFilePrefixes());
+                        contentPackageConfigFields.getFolderName(),
+                        contentPackageConfigFields.getContentFilePrefixes())
+                .stream()
+                .filter(entry -> !isClaimedMoreSpecificallyByAnotherPackage(entry.getName()))
+                .toList();
+    }
+
+    private boolean isClaimedMoreSpecificallyByAnotherPackage(String entryName) {
+        int ownClaim = claimLength(contentPackageConfigFields, entryName);
+        for (CannonRTPPackage otherPackage : cannonRTPPackages.values()) {
+            if (otherPackage == this) continue;
+            if (claimLength(otherPackage.contentPackageConfigFields, entryName) > ownClaim) return true;
+        }
+        return false;
+    }
+
+    /** Length of the longest folder name or file prefix of a package that matches the entry, or -1. */
+    private static int claimLength(ContentPackageConfigFields fields, String entryName) {
+        String name = entryName.toLowerCase(Locale.ROOT);
+        int longest = -1;
+        String folderName = fields.getFolderName();
+        if (folderName != null && name.equals(folderName.toLowerCase(Locale.ROOT)))
+            longest = folderName.length();
+        List<String> prefixes = fields.getContentFilePrefixes();
+        if (prefixes == null) return longest;
+        for (String prefix : prefixes) {
+            if (prefix == null || prefix.isEmpty()) continue;
+            String lowerPrefix = prefix.toLowerCase(Locale.ROOT);
+            if (name.startsWith(lowerPrefix)) longest = Math.max(longest, lowerPrefix.length());
+        }
+        return longest;
     }
 
     @Override
