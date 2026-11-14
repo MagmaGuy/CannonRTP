@@ -419,7 +419,8 @@ public class CannonRTPManager {
 
         boolean shouldScanPlayers = runtimeTick % SCAN_CADENCE_TICKS == 0;
         boolean shouldRenderParticles = runtimeTick % DefaultConfig.getParticleIntervalTicks() == 0;
-        PlayerScanSnapshot playerSnapshot = shouldScanPlayers || shouldRenderParticles
+        // Only the cannon loop below reads the snapshot, so skip it when no cannon is active.
+        PlayerScanSnapshot playerSnapshot = (shouldScanPlayers || shouldRenderParticles) && !activeCannons.isEmpty()
                 ? snapshotPlayers()
                 : null;
 
@@ -809,7 +810,19 @@ public class CannonRTPManager {
         Map<World, WorldPlayerSnapshot> playersByWorld = new HashMap<>();
         Map<UUID, PlayerScanEntry> playersById = new HashMap<>();
 
+        // Every lookup into this snapshot comes from an active cannon's world: chunk
+        // scans use the cannon's world, and a latched player found in any other world
+        // counts as outside the trigger just as a missing entry does.
+        Set<World> cannonWorlds = new HashSet<>();
+        for (ConfiguredCannonRTP cannon : activeCannons) {
+            Location cannonLocation = cannon.getCannonLocation();
+            if (cannonLocation != null && cannonLocation.getWorld() != null) {
+                cannonWorlds.add(cannonLocation.getWorld());
+            }
+        }
+
         for (World world : Bukkit.getWorlds()) {
+            if (!cannonWorlds.contains(world)) continue;
             List<PlayerScanEntry> orderedPlayers = new ArrayList<>();
             Map<Long, List<PlayerScanEntry>> playersByChunk = new HashMap<>();
             int ordinal = 0;

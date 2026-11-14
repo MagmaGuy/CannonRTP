@@ -637,19 +637,26 @@ public class ConfiguredCannonRTP {
         staticModel.playAnimation("fire", false, false);
     }
 
+    private static final Color PRIMARY_READY = Color.fromRGB(255, 179, 71);
+    private static final Color PRIMARY_SEARCHING = Color.fromRGB(255, 140, 66);
+    private static final Color PRIMARY_EXHAUSTED = Color.fromRGB(255, 107, 107);
+    private static final Color ACCENT_READY = Color.fromRGB(255, 241, 168);
+    private static final Color ACCENT_SEARCHING = Color.fromRGB(255, 209, 102);
+    private static final Color ACCENT_EXHAUSTED = Color.fromRGB(255, 159, 104);
+
     public Color getPrimaryVisualColor() {
         return switch (getEffectiveSearchState()) {
-            case READY -> Color.fromRGB(255, 179, 71);
-            case SEARCHING -> Color.fromRGB(255, 140, 66);
-            case EXHAUSTED -> Color.fromRGB(255, 107, 107);
+            case READY -> PRIMARY_READY;
+            case SEARCHING -> PRIMARY_SEARCHING;
+            case EXHAUSTED -> PRIMARY_EXHAUSTED;
         };
     }
 
     public Color getAccentVisualColor() {
         return switch (getEffectiveSearchState()) {
-            case READY -> Color.fromRGB(255, 241, 168);
-            case SEARCHING -> Color.fromRGB(255, 209, 102);
-            case EXHAUSTED -> Color.fromRGB(255, 159, 104);
+            case READY -> ACCENT_READY;
+            case SEARCHING -> ACCENT_SEARCHING;
+            case EXHAUSTED -> ACCENT_EXHAUSTED;
         };
     }
 
