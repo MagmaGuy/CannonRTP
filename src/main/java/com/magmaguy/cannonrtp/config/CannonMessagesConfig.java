@@ -32,8 +32,6 @@ public class CannonMessagesConfig extends ConfigurationFile {
     @Getter
     private static String launchCooldownMessage;
     @Getter
-    private static String cannonDisabledMessage;
-    @Getter
     private static String queueCalibrationMessage;
     @Getter
     private static String noValidLocationYetMessage;
@@ -48,8 +46,6 @@ public class CannonMessagesConfig extends ConfigurationFile {
     @Getter
     private static String probeBlockedMessage;
     @Getter
-    private static String unknownCommandMessage;
-    @Getter
     private static String destinationPreviewSubtitle;
     @Getter
     private static String destinationConfirmedSubtitle;
@@ -63,8 +59,6 @@ public class CannonMessagesConfig extends ConfigurationFile {
     private static String statusExhaustedLabel = "Exhausted";
     @Getter
     private static String statusDisabledLabel = "Disabled";
-    @Getter
-    private static String statusInvalidLabel = "Invalid";
 
     private static List<String> launchQueuedTitles = Collections.emptyList();
     private static List<String> launchQueuedSubtitles = Collections.emptyList();
@@ -138,9 +132,6 @@ public class CannonMessagesConfig extends ConfigurationFile {
                 List.of("Message sent when a player enters a cannon before their launch cooldown expires.",
                         "$seconds is the rounded-up remaining cooldown time; $unit is second or seconds."),
                 fileConfiguration, "launchCooldown", "$prefix &eYour cannon is recharging. Try again in &f$seconds $unit&e.");
-        cannonDisabledMessage = ConfigurationEngine.setRawString(
-                List.of("Message sent when a player steps into a disabled or invalid cannon."),
-                fileConfiguration, "cannonDisabled", "$prefix &cCannon &f$cannon &cis disabled or not ready yet.");
         queueCalibrationMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent while a cannon is still preloading valid locations."),
                 fileConfiguration, "queueCalibration", "$prefix &e$cannon is still calibrating safe landing locations. &7($queued/$target ready, $attempts attempts left)");
@@ -162,9 +153,6 @@ public class CannonMessagesConfig extends ConfigurationFile {
         probeBlockedMessage = ConfigurationEngine.setRawString(
                 List.of("Message sent by /cannonrtp probe when the location is blocked."),
                 fileConfiguration, "probeBlocked", "$prefix &cThis location is blocked by &f$plugin&c: &f$reason");
-        unknownCommandMessage = ConfigurationEngine.setRawString(
-                List.of("Message sent when an admin uses an invalid command."),
-                fileConfiguration, "unknownCommand", "$prefix &cUnknown command. Use &f/cannonrtp &cfor help.");
 
         statusReadyLabel = ConfigurationEngine.setRawString(
                 List.of("Status shown when a cannon is ready to launch."),
@@ -181,9 +169,6 @@ public class CannonMessagesConfig extends ConfigurationFile {
         statusDisabledLabel = ConfigurationEngine.setRawString(
                 List.of("Status shown when a cannon is disabled."),
                 fileConfiguration, "statusLabels.disabled", "Disabled");
-        statusInvalidLabel = ConfigurationEngine.setRawString(
-                List.of("Status shown when a cannon has an invalid configuration."),
-                fileConfiguration, "statusLabels.invalid", "Invalid");
 
         destinationPreviewSubtitle = ConfigurationEngine.setRawString(
                 List.of("Subtitle shown while previewing the chosen destination."),

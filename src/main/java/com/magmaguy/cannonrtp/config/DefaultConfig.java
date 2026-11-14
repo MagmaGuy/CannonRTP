@@ -11,8 +11,6 @@ public class DefaultConfig extends ConfigurationFile {
     private static DefaultConfig instance;
     private static boolean setupDone;
     @Getter
-    private static String language;
-    @Getter
     private static int particleIntervalTicks;
     @Getter
     private static int launchCooldownSeconds;
@@ -43,10 +41,6 @@ public class DefaultConfig extends ConfigurationFile {
                 List.of("Tracks whether the first-time setup guidance has been completed."),
                 fileConfiguration, "setupDone", false);
         autoDownloadPluginUpdates = NightbreakPluginUpdater.setAutoDownloadConfigDefault(fileConfiguration);
-        language = ConfigurationEngine.setString(
-                List.of("Translation file to load. 'english' uses plugin defaults.",
-                        "Release 1 ships English-only; this key exists so future translation packs can target it."),
-                fileConfiguration, "language", "english");
         particleIntervalTicks = Math.max(1, ConfigurationEngine.setInt(
                 List.of("Exact interval, in server ticks, between idle particle renders for enabled cannons.",
                         "Set to 1 to render every tick."),

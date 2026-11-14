@@ -1,5 +1,7 @@
 package com.magmaguy.cannonrtp.config;
 
+import com.magmaguy.magmacore.config.CustomConfigFields;
+import com.magmaguy.magmacore.util.ChatColorConverter;
 import com.magmaguy.magmacore.util.ConfigurationLocation;
 import lombok.Getter;
 import org.bukkit.Location;
@@ -7,7 +9,7 @@ import org.bukkit.Location;
 import java.util.ArrayList;
 import java.util.List;
 
-public class CannonRTPConfigFields extends CannonRTPCustomConfigFields {
+public class CannonRTPConfigFields extends CustomConfigFields {
     @Getter
     private String displayName;
     /**
@@ -60,8 +62,8 @@ public class CannonRTPConfigFields extends CannonRTPCustomConfigFields {
     @Override
     public void processConfigFields() {
         isEnabled = processBoolean("isEnabled", isEnabled, true, true);
-        displayName = translatable(filename, "displayName",
-                processString("displayName", displayName, "CannonRTP", true));
+        String rawDisplayName = processString("displayName", displayName, "CannonRTP", true);
+        displayName = rawDisplayName == null ? null : ChatColorConverter.convert(rawDisplayName);
         cannonLocations = processStringList("cannonLocations", cannonLocations, new ArrayList<>(), true);
 
         targetWorldName = processString("targetWorld", targetWorldName, targetWorldName, true);
