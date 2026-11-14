@@ -15,6 +15,10 @@ import java.util.Optional;
 public class HuskTownsProtectionAdapter implements ProtectionAdapter {
     private static final String PLUGIN_NAME = "HuskTowns";
 
+    // Resolved on the first admin-claim check and kept for this adapter's lifetime;
+    // ProtectionManager rebuilds the adapter on every CannonRTP reload.
+    private volatile HuskTowns huskTownsPlugin;
+
     @Override
     public String getPluginName() {
         return PLUGIN_NAME;
@@ -34,9 +38,13 @@ public class HuskTownsProtectionAdapter implements ProtectionAdapter {
                     : blocked("HuskTowns wilderness");
         }
 
-        HuskTowns plugin = ProtectionAdapter.requireProvider(
-                (HuskTowns) Bukkit.getPluginManager().getPlugin(PLUGIN_NAME),
-                "HuskTowns plugin instance");
+        HuskTowns plugin = huskTownsPlugin;
+        if (plugin == null) {
+            plugin = ProtectionAdapter.requireProvider(
+                    (HuskTowns) Bukkit.getPluginManager().getPlugin(PLUGIN_NAME),
+                    "HuskTowns plugin instance");
+            huskTownsPlugin = plugin;
+        }
         if (townClaim.get().isAdminClaim(plugin)) {
             return ProtectionSettingsConfig.isHuskTownsAllowAdminClaims()
                     ? ProtectionQueryResult.pass()

@@ -11,6 +11,12 @@ import org.bukkit.Location;
 public class LandsProtectionAdapter implements ProtectionAdapter {
     private static final String PLUGIN_NAME = "Lands";
 
+    // Lands documents its integration as created once per plugin. ProtectionManager
+    // rebuilds this adapter on every CannonRTP reload; the owner check re-resolves it
+    // if the CannonRTP instance ever changes in between.
+    private volatile CannonRTP integrationOwner;
+    private volatile LandsIntegration integration;
+
     @Override
     public String getPluginName() {
         return PLUGIN_NAME;
@@ -21,9 +27,14 @@ public class LandsProtectionAdapter implements ProtectionAdapter {
         CannonRTP plugin = ProtectionAdapter.requireProvider(
                 CannonRTP.getInstance(),
                 "CannonRTP plugin instance for Lands");
-        LandsIntegration integration = ProtectionAdapter.requireProvider(
-                LandsIntegration.of(plugin),
-                "Lands integration");
+        LandsIntegration integration = this.integration;
+        if (integration == null || integrationOwner != plugin) {
+            integration = ProtectionAdapter.requireProvider(
+                    LandsIntegration.of(plugin),
+                    "Lands integration");
+            this.integrationOwner = plugin;
+            this.integration = integration;
+        }
         Area area = integration.getArea(location);
         if (area == null) {
             area = integration.getUnloadedArea(location);
