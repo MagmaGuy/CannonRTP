@@ -195,10 +195,6 @@
                             <shadedPattern>com.magmaguy.cannonrtp.magmacore</shadedPattern>
                         </relocation>
                         <relocation>
-                            <pattern>org.reflections</pattern>
-                            <shadedPattern>com.magmaguy.cannonrtp.reflections</shadedPattern>
-                        </relocation>
-                        <relocation>
                             <pattern>com.magmaguy.easyminecraftgoals</pattern>
                             <shadedPattern>com.magmaguy.cannonrtp.easyminecraftgoals</shadedPattern>
                         </relocation>
