@@ -83,22 +83,4 @@ public class CannonRTPConfigFields extends CannonRTPCustomConfigFields {
         requiredPermission = processString("requiredPermission", requiredPermission, "", false);
         customModel = processString("customModel", customModel, "", false);
     }
-
-    /**
-     * Appends a new location entry to the list and returns the new list. Callers are
-     * responsible for persisting the change via ConfigurationEngine.writeValue.
-     */
-    public List<String> addCannonLocation(Location location) {
-        if (cannonLocations == null) cannonLocations = new ArrayList<>();
-        cannonLocations.add(ConfigurationLocation.deserialize(location));
-        return cannonLocations;
-    }
-
-    /**
-     * Removes a location entry by its serialized form. Returns true if removed.
-     */
-    public boolean removeCannonLocation(String serialized) {
-        if (cannonLocations == null) return false;
-        return cannonLocations.remove(serialized);
-    }
 }
