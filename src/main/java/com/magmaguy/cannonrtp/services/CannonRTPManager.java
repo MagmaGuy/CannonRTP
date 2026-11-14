@@ -85,10 +85,30 @@ public class CannonRTPManager {
     }
 
     public void initialize() {
-        reload(null);
+        rebuild();
     }
 
     public void reload(CommandSender sender) {
+        rebuild();
+        if (sender != null) {
+            sendReloadMessage(sender);
+        }
+    }
+
+    /**
+     * Sends the configurable messages.yml reload line with the number of placed cannons.
+     * {@code /wc reload} sends it once the plugin has finished re-initializing.
+     */
+    public void sendReloadMessage(CommandSender sender) {
+        MessageUtils.send(sender, CannonMessagesConfig.getReloadMessage(),
+                "count", String.valueOf(configuredCannons.size()));
+    }
+
+    /**
+     * Tears down and rebuilds every cannon from the config files without telling anyone.
+     * Edit commands use this so only their own confirmation reaches the admin.
+     */
+    private void rebuild() {
         shutdownTasks();
         for (ConfiguredCannonRTP instance : configuredCannons.values()) {
             instance.remove(RemovalReason.RELOAD);
@@ -128,10 +148,6 @@ public class CannonRTPManager {
         }
 
         startTasks();
-        if (sender != null) {
-            MessageUtils.send(sender, CannonMessagesConfig.getReloadMessage(),
-                    "count", String.valueOf(configuredCannons.size()));
-        }
     }
 
     public void shutdown() {
@@ -232,7 +248,7 @@ public class CannonRTPManager {
             plugin.getLogger().warning("Failed to create cannon " + sanitizedId + ": " + failure.getMessage());
             return;
         }
-        reload(player);
+        rebuild();
         CannonRTPConfigFields reloadedFields = CannonRTPConfig.getCannonRTPs().get(filename);
         String configPath = reloadedFields != null && reloadedFields.getFile() != null
                 ? reloadedFields.getFile().getAbsolutePath()
@@ -259,7 +275,7 @@ public class CannonRTPManager {
         List<String> updated = new ArrayList<>(fields.getCannonLocations());
         updated.add(ConfigurationLocation.deserialize(player.getLocation()));
         if (!saveCannonValue(fields, "cannonLocations", updated, player)) return;
-        reload(player);
+        rebuild();
         MessageUtils.send(player, CannonMessagesConfig.getPlacedCannonMessage(),
                 "cannon", fields.getDisplayName());
     }
@@ -302,9 +318,9 @@ public class CannonRTPManager {
         List<String> updated = new ArrayList<>(fields.getCannonLocations());
         updated.remove(nearest.getLocationString());
         if (!saveCannonValue(fields, "cannonLocations", updated, player)) return;
-        // reload() below already tears down every instance with RemovalReason.RELOAD,
+        // rebuild() below already tears down every instance with RemovalReason.RELOAD,
         // which performs the identical cleanup for the removed placement.
-        reload(player);
+        rebuild();
         MessageUtils.send(player, CannonMessagesConfig.getRemovedCannonMessage(),
                 "cannon", fields.getDisplayName());
     }
@@ -325,7 +341,7 @@ public class CannonRTPManager {
                     "reason", "Failed to delete " + file.getName() + ".");
             return;
         }
-        reload(sender);
+        rebuild();
         MessageUtils.send(sender, CannonMessagesConfig.getDeletedCannonMessage(), "cannon", id);
     }
 
@@ -339,7 +355,7 @@ public class CannonRTPManager {
             return;
         }
         if (!saveCannonValue(fields, "targetWorld", world.getName(), sender)) return;
-        reload(sender);
+        rebuild();
         MessageUtils.send(sender, CannonMessagesConfig.getTargetWorldUpdatedMessage(),
                 "cannon", fields.getDisplayName(), "world", world.getName());
     }
@@ -354,7 +370,7 @@ public class CannonRTPManager {
             return;
         }
         if (!saveCannonValue(fields, "searchCenter", ConfigurationLocation.deserialize(location), sender)) return;
-        reload(sender);
+        rebuild();
         MessageUtils.send(sender, CannonMessagesConfig.getSearchCenterUpdatedMessage(),
                 "cannon", fields.getDisplayName());
     }

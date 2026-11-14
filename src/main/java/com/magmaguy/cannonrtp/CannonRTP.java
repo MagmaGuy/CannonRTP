@@ -23,11 +23,13 @@ import com.magmaguy.magmacore.nightbreak.NightbreakFirstTimeSetupWarner;
 import com.magmaguy.magmacore.nightbreak.NightbreakPluginBootstrap;
 import com.magmaguy.magmacore.nightbreak.NightbreakPluginHooks;
 import com.magmaguy.magmacore.nightbreak.NightbreakPluginSpec;
+import com.magmaguy.magmacore.nightbreak.NightbreakPluginStateRegistry;
 import com.magmaguy.magmacore.util.Logger;
 import com.magmaguy.magmacore.util.VersionChecker;
 import lombok.Getter;
 import org.bstats.bukkit.Metrics;
 import org.bukkit.Location;
+import org.bukkit.command.CommandSender;
 import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -83,6 +85,16 @@ public final class CannonRTP extends JavaPlugin {
                     @Override
                     public void onInitializationSuccess() {
                         Logger.info("CannonRTP fully initialized!");
+                        // /wc reload registers its sender with the bootstrap, which would
+                        // answer with the fixed spec line. Claim the sender here so the
+                        // admin gets the configurable messages.yml reload line instead.
+                        if (cannonRTPManager != null) {
+                            CommandSender reloadSender =
+                                    NightbreakPluginStateRegistry.consumePendingReloadSender(CannonRTP.this);
+                            if (reloadSender != null) {
+                                cannonRTPManager.sendReloadMessage(reloadSender);
+                            }
+                        }
                     }
 
                     @Override
