@@ -36,6 +36,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Comparator;
+import java.util.logging.Level;
 
 public class CannonRTPManager {
     private static final int SCAN_CADENCE_TICKS = 2;
@@ -412,7 +413,16 @@ public class CannonRTPManager {
         while (launchIterator.hasNext()) {
             Map.Entry<UUID, LaunchSequence> entry = launchIterator.next();
             LaunchSequence sequence = entry.getValue();
-            if (!sequence.tick()) {
+            boolean running;
+            try {
+                running = sequence.tick();
+            } catch (RuntimeException exception) {
+                // One launch failing must not stop the other launches and the cannons this tick. The failed launch
+                // keeps its phase and tries again next tick, as it did when the exception ended the whole tick.
+                plugin.getLogger().log(Level.WARNING, "A CannonRTP launch failed this tick and will retry next tick.", exception);
+                continue;
+            }
+            if (!running) {
                 launchIterator.remove();
             }
         }
