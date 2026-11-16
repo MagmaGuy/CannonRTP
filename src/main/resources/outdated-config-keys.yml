@@ -1,0 +1,11 @@
+# Retirement rules MagmaCore applies before CannonRTP loads its configuration.
+# See Magmacore/OUTDATED_CONFIGURATIONS.md for the rule types.
+
+# Nothing ever showed the "Invalid" status label, and statusLabels.invalid is no
+# longer generated.
+# messages.yml keeps other nested keys, so only this one is removed, and only
+# while it holds the shipped label; an edited label stays.
+messages.yml:
+  - files: [messages.yml]
+    removeKey: statusLabels.invalid
+    shippedValues: [Invalid]
